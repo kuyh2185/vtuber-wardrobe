@@ -6,9 +6,9 @@ from mathutils.geometry import barycentric_transform
 
 CHAINS = 8
 CY = -0.012
-JOINTS = [(1.045, .130), (.955, .185), (.865, .235), (.775, .285)]   # (높이, 반지름) 뼈 마디, 마지막은 끝
-UP = ('Jeogori', 'Base', 'Sash', 'Collar', 'BowNeck')
-SKIRT = ('Skirt', 'Ruffle', 'BowWaist', 'Norigae')
+JOINTS = [(1.02, .125), (.94, .175), (.86, .22), (.775, .27)]   # (높이, 반지름) 뼈 마디, 마지막은 끝
+UP = ('Jeogori', 'Base', 'Sash', 'Cord', 'Collar', 'BowNeck')
+SKIRT = ('Skirt', 'Veil', 'Ruffle', 'BowWaist', 'Norigae')
 ARML = ('SleeveL', 'CapL', 'CuffL', 'CuffFrillL')
 ARMR = ('SleeveR', 'CapR', 'CuffR', 'CuffFrillR')
 ELBOW = .327
@@ -106,7 +106,7 @@ def skirt_weight(p):
     for i, w in ((i0 % CHAINS, 1 - f), ((i0 + 1) % CHAINS, f)):
         z = p.z
         if z >= zs[0]:
-            s = min((z - zs[0]) / (1.10 - zs[0]), 1)
+            s = min((z - zs[0]) / (1.08 - zs[0]), 1)
             out['J_Bip_C_Hips'] = out.get('J_Bip_C_Hips', 0) + w * s
             out[cname(i, 0)] = out.get(cname(i, 0), 0) + w * (1 - s)
         else:
@@ -182,7 +182,7 @@ def bind():
 
     def sk(p):
         w = skirt_weight(p)
-        q = min(max((p.z - 1.04) / .06, 0), 1)
+        q = min(max((p.z - 1.0) / .06, 0), 1)
         if q > 0:   # 허리 위쪽은 몸을 그대로 따라감
             b = near(t, p)
             m = {k: v * (1 - q) for k, v in w.items()}
@@ -194,7 +194,7 @@ def bind():
         apply(objs[n], sk)
     def sleeve_w(side):
         def f(p):       # 솔기 근처는 피부와 똑같이, 멀어지면 팔을 따라감
-            q = min(max((abs(p.x) - .172) / .07, 0), 1)
+            q = min(max((abs(p.x) - .155) / .07, 0), 1)
             q = q * q * (3 - 2 * q)
             a = arm_weight(p, side)
             if q >= 1:

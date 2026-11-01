@@ -4,19 +4,19 @@ exec(open(os.path.expanduser('~/vtuber-wardrobe/blender/common.py'), encoding='u
 
 CY = -0.012        # 몸 중심 y
 RY = 0.82          # 앞뒤 납작한 정도
-WAIST_Z = 1.122
+WAIST_Z = 1.085
 WAIST_R = 0.088    # 허리 반지름(x 기준), 틀의 첫 값
 
 
 def petti(name='Petti', profile=None):
     """속치마 틀: 허리에서 엉덩이까지 붙었다가 아래서 둥글게 벌어짐"""
-    p = profile or [(.085, 1.14), (.09, WAIST_Z), (.105, 1.085), (.135, 1.04), (.170, .985),
-                    (.203, .93), (.232, .87), (.25, .81), (.262, .76), (.262, .70)]
+    p = profile or [(.085, 1.10), (.092, WAIST_Z), (.112, 1.05), (.14, 1.01), (.172, .965),
+                    (.2, .92), (.222, .87), (.238, .82), (.246, .77), (.246, .70)]
     o = lathe(name, p, 64, 'Sim')
     for v in o.data.vertices:
         # 허리는 몸이 앞쪽에 있어 틀 중심도 같이 앞으로
-        t = min(max((v.co.z - .96) / .16, 0), 1)
-        v.co.y = v.co.y * RY + CY - .03 * t * t * (3 - 2 * t)
+        t = min(max((v.co.z - .95) / .12, 0), 1)
+        v.co.y = v.co.y * RY + CY - .032 * t * t * (3 - 2 * t)
     o.data.update()
     o.modifiers.new('col', 'COLLISION')
     o.collision.thickness_outer = .004

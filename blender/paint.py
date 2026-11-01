@@ -7,6 +7,7 @@ CY = -0.012
 #        x0 y0 x1 y1 (픽셀)
 RECT = {
     'Skirt': (0, 0, 2048, 620),
+    'Veil': (0, 640, 2048, 1160),
     'Ruffle': (0, 1180, 2048, 1400),
     'Sleeve': (0, 1420, 2048, 1760),
     'Jeogori': (0, 1780, 1200, 2048),
@@ -119,18 +120,6 @@ def build(objs):
     shade = np.clip(cav / .018, -1, 1)[..., None]
     tone = np.array([.88, .62, .72])    # 그늘 색(곱)
     img = img * (1 - np.clip(shade, 0, 1) * (1 - tone) * 1.0) + np.clip(-shade, 0, 1) * .05
-    # 밑단 물결 띠 두 줄
-    for vv, a, c in ((.905, .55, np.array([.97, .62, .72])), (.95, .55, np.array([.97, .62, .72]))):
-        yy = (vv + .010 * np.sin(np.linspace(0, 2 * math.pi * 60, w)))[None, :]
-        m = np.exp(-((np.linspace(0, 1, h)[:, None] - yy) / .0045) ** 2) * a
-        img = img * (1 - m[..., None]) + c * m[..., None]
-    # 밑단 레이스: 흰 물결 끝선
-    uu = np.linspace(0, 1, w)[None, :]
-    vvv = np.linspace(0, 1, h)[:, None]
-    N = 70
-    wave = .83 - .022 * np.abs(np.sin(math.pi * N * uu)) ** .7
-    lace = np.clip((vvv - wave) / .004, 0, 1)
-    img = img * (1 - lace[..., None] * .93) + WHITE * lace[..., None] * .93
     # 벚꽃: 앞쪽 오른편에 몰리게, 뒤는 드물게(저장은 위가 윗줄)
     img4 = np.dstack([img, np.ones((h, w))])
     for _ in range(90):
@@ -141,9 +130,27 @@ def build(objs):
             continue
         sz = rng.uniform(13, 27)
         petal(img4, int(u * w), int(vv * h), sz, np.array([.90, .36, .52]), rng.uniform(.75, 1), ax=.6, rot=rng.uniform(0, 6))
-    for k in range(N):       # 레이스 안 작은 꽃
-        petal(img4, int((k + .5) / N * w), int(.885 * h), 7, np.array([.95, .70, .78]), .9, ax=.6, rot=k)
     A[y0:y1, x0:x1, :3] = img4[..., :3]
+
+    # 겉천: 위는 거의 투명, 아래로 갈수록 흰 망사 + 밑단 레이스
+    x0, y0, x1, y1 = RECT['Veil']
+    h, w = y1 - y0, x1 - x0
+    uu = np.linspace(0, 1, w)[None, :]
+    vv = np.linspace(0, 1, h)[:, None]
+    al = .10 + .40 * vv ** 1.8
+    for c, a in ((.80, .75), (.835, .55)):      # 레이스 윗선
+        al = np.maximum(al, np.exp(-((vv - c - .006 * np.sin(2 * math.pi * 46 * uu)) / .0035) ** 2) * a)
+    mask = np.zeros((h, w, 4))
+    N = 46
+    for k in range(N):      # 레이스 꽃
+        petal(mask, int((k + .5) / N * w), int(.90 * h), 12, np.ones(3), 1, ax=.9, rot=k)
+    al = np.maximum(al, np.clip((vv - .80) / .006, 0, 1) * .58)   # 레이스 띠
+    al = np.maximum(al, mask[..., 0] * .92)
+    edge = .985 - .03 * np.abs(np.sin(math.pi * N * uu)) ** .7     # 물결 끝선
+    # 알파가 완전히 0이면 저장할 때 색이 검게 지워져 가장자리에 검은 점이 생김
+    al = np.maximum(al * np.clip((edge - vv) / .004, 0, 1), .012)
+    A[y0:y1, x0:x1, :3] = WHITE
+    A[y0:y1, x0:x1, 3] = al
 
     # 프릴: 흰색 + 골 그늘
     rf = objs['Ruffle']
@@ -153,12 +160,12 @@ def build(objs):
     h, w = y1 - y0, x1 - x0
     cav = stretch(cavity(rad, 5), h, w)
     shade = np.clip(cav / .012, 0, 1)[..., None]
-    A[y0:y1, x0:x1, :3] = WHITE * (1 - shade) + np.array([.90, .78, .84]) * shade
+    A[y0:y1, x0:x1, :3] = WHITE * (1 - shade) + np.array([.95, .87, .90]) * shade
     A[y0:y1, x0:x1, 3] = 1
 
     # 소매: 비침, 골은 천이 겹쳐 덜 비침
     sl = objs['SleeveL']
-    ARM_A, ARM_B = np.array([.165, .002, 1.2615]), np.array([.505, -.014, 1.262])
+    ARM_A, ARM_B = np.array([.150, .002, 1.2615]), np.array([.505, -.014, 1.262])
     d = (ARM_B - ARM_A) / np.linalg.norm(ARM_B - ARM_A)
     rad = grid_rad(sl, 46, 84, (ARM_A, d))
     x0, y0, x1, y1 = RECT['Sleeve']
@@ -175,9 +182,9 @@ def build(objs):
     h, w = y1 - y0, x1 - x0
     yy, xx = np.mgrid[0:h, 0:w]
     a = xx / w * 2 * math.pi
-    z = 1.14 + (yy / (h - 1)) * (1.345 - 1.14)
+    z = 1.10 + (yy / (h - 1)) * (1.345 - 1.10)
     front = np.clip(-np.sin(a), 0, 1)
-    hem = 1.172 - .022 * front ** 3 + .006 * np.cos(6 * a) * front
+    hem = 1.138 - .022 * front ** 3 + .006 * np.cos(6 * a) * front
     img = np.broadcast_to(np.array([.985, .745, .805]), (h, w, 3)).copy()
     # 가슴 밑 그늘과 옆 다트
     sh = np.exp(-((z - 1.205) / .022) ** 2) * front ** 2 * .13
@@ -194,7 +201,7 @@ def build(objs):
         zz = rng.uniform(1.19, 1.30)
         if abs(zz - 1.245 - (an - 5.15) * .1) > .05:
             continue
-        petal(img4, int(an / 6.283 * w), int((zz - 1.14) / .205 * h), rng.uniform(4, 7), WHITE, .9, ax=.9, rot=rng.uniform(0, 6))
+        petal(img4, int(an / 6.283 * w), int((zz - 1.10) / .245 * h), rng.uniform(4, 7), WHITE, .9, ax=.9, rot=rng.uniform(0, 6))
     A[y0:y1, x0:x1, :3] = img4[..., :3]
     A[y0:y1, x0:x1, 3] = 1
 
@@ -226,17 +233,18 @@ def textured(name, img, base_rgba=(1, 1, 1, 1)):
 def run():
     objs = bpy.data.objects
     uv_grid(objs['Skirt'], 26, 160, 'Skirt')
+    uv_grid(objs['Veil'], 29, 160, 'Veil')
     uv_grid(objs['Ruffle'], len(objs['Ruffle'].data.vertices) // 210, 210, 'Ruffle')
     uv_grid(objs['SleeveL'], 46, 84, 'Sleeve')
     uv_grid(objs['SleeveR'], 46, 84, 'Sleeve')
-    uv_cyl(objs['Jeogori'], 'Jeogori', 1.14, 1.345)
+    uv_cyl(objs['Jeogori'], 'Jeogori', 1.10, 1.345)
     img = build(objs)
     op = textured('ClothTex', img)
     sh = textured('SheerTex', img)
     for n in ('Skirt', 'Ruffle', 'Jeogori'):
         objs[n].data.materials.clear()
         objs[n].data.materials.append(op)
-    for n in ('SleeveL', 'SleeveR'):
+    for n in ('SleeveL', 'SleeveR', 'Veil'):
         objs[n].data.materials.clear()
         objs[n].data.materials.append(sh)
     return img

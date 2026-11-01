@@ -130,15 +130,15 @@ def jeogori(R):
     # 밑단: 앞 가운데로 내려오는 둥근 물결(저고리 도련 곡선)
     def hem(a):
         front = max(0, -math.sin(a))
-        return 1.172 - .022 * front ** 3 + .006 * math.cos(6 * a) * front
+        return 1.138 - .022 * front ** 3 + .006 * math.cos(6 * a) * front
     o = rmesh('Jeogori', R, hem, 1.355, .006, 46)
-    Zn, Zv = 1.338, 1.222          # 목 옆, V 바닥
-    Xn = .066
+    Zn, Zv = 1.338, 1.245          # 목 옆, V 바닥
+    Xn = .052
     for s in (1, -1):
         n = Vector((-s * (Zn - Zv), 0, Xn)).normalized()
         cut(o, (0, 0, Zv), tuple(n), lambda c: c.y > .012 or c.x * s < 0)
         # 진동둘레: 약간 기울어진 평면
-        cut(o, (s * .165, 0, 1.26), (s * 1, 0, -.10))
+        cut(o, (s * .150, 0, 1.26), (s * 1, 0, -.10))
     cut(o, (0, 0, 1.334), (0, .30, 1))
     return o
 

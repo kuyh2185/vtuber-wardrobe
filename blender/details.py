@@ -44,7 +44,7 @@ def frill(name, ring, width, amp, folds, rows=7, closed=True, seed=1):
 
 def surface(R):
     """앞뒤로 쏘아 몸 볼록 껍질 위 점을 찾는 도구"""
-    o = rmesh('_hull', R, 1.09, 1.355, .0, 46)
+    o = rmesh('_hull', R, 1.06, 1.355, .0, 46)
     me = o.data
     tree = BVHTree.FromPolygons([tuple(v.co) for v in me.vertices], [tuple(p.vertices) for p in me.polygons])
     remove('_hull')
@@ -97,7 +97,7 @@ def bow(name, c, n, w=.042, h=.020, tail=.09, tail_w=.012, lean=0):
         for i in range(N):
             t = i / (N - 1)
             hh = h * math.sin(math.pi * t ** .62) ** .8 + .003
-            dd = .0035 + .0065 * math.sin(math.pi * t ** .7)
+            dd = (.0035 + .0065 * math.sin(math.pi * t ** .7)) * w / .042
             cc = c + side * s * w * t + n * (.005 + .006 * t) - up * .004 * t
             ring = []
             for j in range(M):
@@ -129,7 +129,7 @@ def bow(name, c, n, w=.042, h=.020, tail=.09, tail_w=.012, lean=0):
     return join(name, objs)
 
 
-def norigae(name, x, ytop, top=1.098, knot=1.074):
+def norigae(name, x, ytop, top=1.062, knot=1.03):
     """매듭(네 잎) + 짧은 끈 + 술. ytop(z)은 그 높이의 천 앞면 y."""
     objs = []
 

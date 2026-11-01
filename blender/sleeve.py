@@ -2,12 +2,12 @@
 import os, random
 exec(open(os.path.expanduser('~/vtuber-wardrobe/blender/common.py'), encoding='utf-8').read())
 
-ARM_A = Vector((.165, .002, 1.2615))   # 진동둘레 중심(어깨 끝)
+ARM_A = Vector((.150, .002, 1.2615))   # 진동둘레 중심(어깨 끝)
 ARM_B = Vector((.505, -.014, 1.262))   # 소매 끝(손목 조금 앞)
 TILT = Vector((.10, 0, .995)).normalized()   # 진동둘레 면의 위쪽
 
 
-def sleeve(name='SleeveL', rows=46, cols=84, folds=11, frames=70, seed=2, press=.015, ra=(.0425, .0445), rb=.034):
+def sleeve(name='SleeveL', rows=46, cols=84, folds=11, frames=70, seed=2, press=.010, ra=(.0425, .0445), rb=.034):
     """통 천 반지름이 어깨 5.2cm -> 손목 쪽 8cm로 넓어지는 재단, 양 끝을 모은다."""
     random.seed(seed)
     ax = (ARM_B - ARM_A).normalized()
@@ -18,7 +18,7 @@ def sleeve(name='SleeveL', rows=46, cols=84, folds=11, frames=70, seed=2, press=
     ph = [random.uniform(0, 6.28) for _ in range(3)]
 
     def rest(t):
-        return .052 + .028 * min(t / .8, 1) ** 1.4
+        return .046 + .024 * min(t / .8, 1) ** 1.4
 
     def seed_fold(a, t):
         return .005 * math.sin(folds * a + ph[0] + 1.5 * math.sin(a + ph[1])) * (.3 + .7 * t)
