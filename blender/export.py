@@ -29,6 +29,14 @@ for name in ('Pink', 'Deep', 'White'):
 atlas = bpy.data.images['outfit_atlas']
 toon(bpy.data.materials['ClothTex'], None, atlas)
 toon(bpy.data.materials['SheerTex'], 1.0, atlas)
+toon(bpy.data.materials['SmallTex'], None, bpy.data.images['small_atlas'])
+if 'Skirt' not in bpy.data.objects:    # 칠에 그늘이 이미 들어 있어 실시간 그늘은 살짝만, 조명이 어두워도 칠이 탁해지지 않게 자체 밝기
+    for n, im in (('ClothTex', atlas), ('SmallTex', bpy.data.images['small_atlas'])):
+        _m = bpy.data.materials[n].vrm_addon_extension.mtoon1
+        _m.extensions.vrmc_materials_mtoon.shade_color_factor = (.98, .96, .985)
+        _m.emissive_texture.index.source = im
+        _m.emissive_factor = (.25, .25, .25)
+        _m.extensions.khr_materials_emissive_strength.emissive_strength = 1
 _x = bpy.data.materials['SheerTex'].vrm_addon_extension.mtoon1
 _x.extensions.vrmc_materials_mtoon.shade_color_factor = (.98, .95, .96)   # 비침 천 뒷면이 회색이 되지 않게
 _x.extensions.vrmc_materials_mtoon.outline_width_mode = 'none'   # 투명 천은 외곽선 패스가 천 위에 겹쳐 그려져 자주색이 됨

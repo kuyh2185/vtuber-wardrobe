@@ -295,6 +295,44 @@ def textured(name, img, base_rgba=(1, 1, 1, 1)):
     return m
 
 
+SMALL = ('Base', 'Sash', 'Cord', 'Collar', 'CapL', 'CapR', 'CuffL', 'CuffR', 'CuffFrillL', 'CuffFrillR', 'BowNeck', 'BowWaist', 'Norigae')
+BAKED = os.path.expanduser('~/vtuber-wardrobe/out/v4/baked/')
+
+
+def small_uv():
+    """작은 부품도 칠을 받도록 둘째 아틀라스에 UV를 편다"""
+    bpy.ops.object.select_all(action='DESELECT')
+    os_ = [bpy.data.objects[n] for n in SMALL]
+    for o in os_:
+        if not o.data.uv_layers:
+            o.data.uv_layers.new(name='UVMap')
+        o.select_set(True)
+    bpy.context.view_layer.objects.active = os_[0]
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.mesh.select_all(action='SELECT')
+    bpy.ops.uv.smart_project(angle_limit=1.15, island_margin=.008)
+    bpy.ops.object.mode_set(mode='OBJECT')
+    img = bpy.data.images.get('small_atlas') or bpy.data.images.new('small_atlas', S, S, alpha=True)
+    m = textured('SmallTex', img)
+    for o in os_:
+        keep = o.data.materials[0].diffuse_color[:3]
+        o['flat'] = keep
+        o.data.materials.clear()
+        o.data.materials.append(m)
+    return img
+
+
+def overlay(img, name):
+    """AI 칠을 구운 그림이 있으면 코드 칠 위에 덮어쓴다(paintover/project.py)"""
+    a = bpy.data.images.load(BAKED + name + '.png')
+    px = np.empty(S * S * 4, np.float32)
+    a.pixels.foreach_get(px)
+    img.pixels.foreach_set(px)
+    img.update()
+    img.pack()
+    bpy.data.images.remove(a)
+
+
 def run():
     objs = bpy.data.objects
     uv_grid(objs['Skirt'], 26, 160, 'Skirt')
@@ -312,4 +350,16 @@ def run():
     for n in ('SleeveL', 'SleeveR', 'Veil'):
         objs[n].data.materials.clear()
         objs[n].data.materials.append(sh)
+    small = small_uv()
+    if os.path.exists(BAKED + 'cloth.png'):
+        overlay(img, 'cloth')
+        overlay(small, 'small')
+        bpy.data.objects.remove(objs['Skirt'], do_unlink=True)    # 칠은 주름을 덮는 매끈한 겉천 쪽에 들어 있다
+        for n in ('SleeveL', 'SleeveR', 'Veil'):
+            objs[n].data.materials.clear()
+            objs[n].data.materials.append(op)
+    else:
+        small.pixels.foreach_set(np.ones(S * S * 4, np.float32))
+        small.update()
+        small.pack()
     return img

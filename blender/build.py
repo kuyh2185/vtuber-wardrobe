@@ -178,7 +178,7 @@ def build_small():
     paint(mirror(cf, 'CuffFrillR'), mat('White', WHITE))
     # 저고리 고름 리본
     p, n = at(.0, Zv - .03)
-    paint(bow('BowNeck', p + n * .012, Vector((0, -1, .08)).normalized(), w=.032, h=.016, tail=.12, tail_w=.007), mat('White', WHITE))
+    paint(bow('BowNeck', p + n * .012, Vector((0, -1, .08)).normalized(), w=.024, h=.012, tail=.05, tail_w=.006), mat('White', WHITE))
     # 허리 리본
     p, n = at(-.058, 1.098)
     paint(bow('BowWaist', p + n * .014, Vector((0, -1, 0)), w=.026, h=.014, tail=.15, tail_w=.008, lean=.05), mat('Deep', DEEP))

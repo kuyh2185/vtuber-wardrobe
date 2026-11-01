@@ -20,7 +20,7 @@ renderer.setSize(innerWidth, innerHeight);
 document.body.append(renderer.domElement);
 const scene = new THREE.Scene();
 scene.background = new THREE.Color('#25222e');
-const cam = new THREE.PerspectiveCamera(22, innerWidth / innerHeight, .1, 50);
+let cam = new THREE.PerspectiveCamera(22, innerWidth / innerHeight, .1, 50);
 scene.add(new THREE.AmbientLight(0xffffff, .92));
 const key = new THREE.DirectionalLight(0xffffff, 1.5);
 key.position.set(-1, 2, 2.4);
@@ -51,6 +51,13 @@ vrm.scene.updateMatrixWorld(true);
 const H = 1.6 * 1.16, D = H / 2 / Math.tan(cam.fov * Math.PI / 360) * 1.04 / zoom;
 cam.position.set(Math.sin(yaw) * D, H * cy, Math.cos(yaw) * D);
 cam.lookAt(0, H * cy, 0);
+// ?ortho=세로 높이(m) &cz=가운데 높이: 그림을 메시에 되돌려 씌울 때 쓰는 직교 카메라
+if (q.get('ortho')) {
+  const hh = +q.get('ortho') / 2, cz = +q.get('cz'), hw = hh * innerWidth / innerHeight;
+  cam = new THREE.OrthographicCamera(-hw, hw, hh, -hh, .1, 50);
+  cam.position.set(Math.sin(yaw) * 5, cz, Math.cos(yaw) * 5);
+  cam.lookAt(0, cz, 0);
+}
 for (let i = 0; i < 90; i++) vrm.update(1 / 60);
 renderer.render(scene, cam);
 
@@ -75,5 +82,22 @@ window.__info = {
   meshes: [], tris: renderer.info.render.triangles, calls: renderer.info.render.calls,
 };
 vrm.scene.traverse(o => { if (o.isMesh) window.__info.meshes.push(o.name); });
+// 그린 자세 그대로의 세계 좌표(흔들림 뼈 포함)
+window.__posed = () => {
+  const out = [], v = new THREE.Vector3();
+  vrm.scene.updateMatrixWorld(true);
+  vrm.scene.traverse(o => {
+    if (!o.isMesh || !o.visible) return;
+    const g = o.geometry, n = g.attributes.position.count, pos = new Array(n * 3);
+    for (let i = 0; i < n; i++) {
+      o.getVertexPosition(i, v);
+      v.applyMatrix4(o.matrixWorld);
+      pos[i * 3] = +v.x.toFixed(5); pos[i * 3 + 1] = +v.y.toFixed(5); pos[i * 3 + 2] = +v.z.toFixed(5);
+    }
+    out.push({ name: o.name, parent: o.parent?.name, mat: o.material.name, pos,
+      uv: g.attributes.uv ? [...g.attributes.uv.array] : null, index: g.index ? [...g.index.array] : null });
+  });
+  return out;
+};
 window.__ready = true;
 </script>
