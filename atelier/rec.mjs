@@ -46,10 +46,11 @@ await tick(2.4);
 await cap('버튜버가 직접 바꾸는 출발점이에요');
 await tick(1.8);
 
+await card('오프숄더 스트릿').click(); // 글자 넣기가 있는 옷으로 보여 준다
 await go(1);
 await cap('치마 길이를 줄이고');
-await tick(2, t => slide(3, .75 - .6 * t));
-await cap('후드를 늘리고');
+await tick(2, t => slide(2, .75 - .6 * t));
+await cap('소매를 더 크게 만들고');
 await tick(1.6, t => slide(0, .3 + .5 * t));
 await cap('색을 고르고');
 for (const i of [1, 2, 3]) { await pg.locator('.sw button').nth(i).click(); await tick(.5); }

@@ -29,19 +29,37 @@ export function folds(c, r, seed, n = 16, dark = .22, light = .08) { // 천 주�
   c.restore();
 }
 
+// 모은 천의 주름 높이(0 골 ~ 1 마루). 간격이 불규칙하고 n이 정수면 둘레가 이어진다. 3D 모양과 그림이 같은 값을 쓴다.
+export function fold(u, n, seed = 1) {
+  const T = Math.PI * 2, s = seed * 1.37;
+  const ph = u * n + .5 * Math.sin(T * (u * 3 + s)) + .28 * Math.sin(T * (u * 7 + s * 2.1)) + .14 * Math.sin(T * (u * 13 + s * 3.3));
+  return Math.abs(Math.sin(Math.PI * ph)) ** .75;
+}
+
+export function gather(c, r, n, seed = 1, dark = .34, light = .1) { // 주름 골에 그늘, 마루에 빛: 3D 주름과 정확히 겹친다
+  for (let x = 0; x < r.w; x++) {
+    const h = fold(x / r.w, n, seed), d = (1 - h) ** 2 * dark, l = h ** 6 * light;
+    if (d > .004) { c.fillStyle = `rgba(14,10,30,${d})`; c.fillRect(r.x + x, r.y, 1, r.h); }
+    if (l > .004) { c.fillStyle = `rgba(255,252,255,${l})`; c.fillRect(r.x + x, r.y, 1, r.h); }
+  }
+}
+
+export function lace(c, r, col, dot = 'rgba(30,24,50,.34)', step = 26) { // 레이스 구멍 무늬: 끝선 쪽 줄이 촘촘하다
+  fill(c, r, col);
+  c.fillStyle = dot;
+  for (let row = 0; row < 3; row++) {
+    const y = r.y + r.h * (.5 + row * .17), s = step * (1 - row * .15), R = 3.4 - row * .6;
+    for (let x = r.x + (row % 2 ? s / 2 : 0); x < r.x + r.w; x += s) { c.beginPath(); c.arc(x, y, R, 0, Math.PI * 2); c.fill(); }
+  }
+  c.fillRect(r.x, r.y + r.h * .34, r.w, 2.5);
+}
+
 export function stitch(c, x0, y0, x1, y1, col, w = 2, dash = [9, 7]) {
   c.save(); c.strokeStyle = col; c.lineWidth = w; c.setLineDash(dash);
   c.beginPath(); c.moveTo(x0, y0); c.lineTo(x1, y1); c.stroke(); c.restore();
 }
 
 export function band(c, r, y, h, col) { c.fillStyle = col; c.fillRect(r.x, y, r.w, h); }
-
-export function rib(c, r, gap = 9) { // 고무단 골
-  c.fillStyle = 'rgba(0,0,0,.28)';
-  for (let x = r.x; x < r.x + r.w; x += gap) c.fillRect(x, r.y, 2.5, r.h);
-  c.fillStyle = 'rgba(255,255,255,.07)';
-  for (let x = r.x + 4; x < r.x + r.w; x += gap) c.fillRect(x, r.y, 2, r.h);
-}
 
 export function plaid(c, r, a, b, line, step = 58) { // 체크 원단
   c.fillStyle = a; c.fillRect(r.x, r.y, r.w, r.h);
@@ -52,15 +70,6 @@ export function plaid(c, r, a, b, line, step = 58) { // 체크 원단
   for (let x = r.x + step * .68; x < r.x + r.w; x += step) c.fillRect(x, r.y, 3, r.h);
   for (let y = r.y + step * .68; y < r.y + r.h; y += step) c.fillRect(r.x, y, r.w, 3);
   c.globalAlpha = 1;
-}
-
-export function pleatShade(c, r, n) { // 주름치마 칸마다 그늘
-  const w = r.w / n;
-  for (let i = 0; i < n; i++) {
-    const g = c.createLinearGradient(r.x + i * w, 0, r.x + (i + 1) * w, 0);
-    g.addColorStop(0, 'rgba(255,250,255,.16)'); g.addColorStop(.5, 'rgba(0,0,0,0)'); g.addColorStop(.86, 'rgba(6,4,14,.42)'); g.addColorStop(1, 'rgba(6,4,14,.62)');
-    c.fillStyle = g; c.fillRect(r.x + i * w, r.y, w + 1, r.h);
-  }
 }
 
 export function metal(c, r, hi, mid, lo) { // 금속 칸

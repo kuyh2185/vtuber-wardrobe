@@ -23,6 +23,16 @@ export class Radial { // 높이 × 각도별 몸 표면 반지름. 옷 밑이 �
   finish() {
     const { nt, na, g } = this;
     this.cov = Array.from({ length: nt }, (_, i) => this.coverage(i));
+    for (let j = 0; j < na; j++) { // 가까운 위아래로 먼저 메운다. 옆에서 메우면 오목한 등 가운데가 양옆 값으로 튀어 천에 물결이 생긴다.
+      const c = Array.from({ length: nt }, (_, i) => g[i * na + j]);
+      for (let i = 0; i < nt; i++) {
+        if (c[i] >= 0) continue;
+        let a = i - 1, b = i + 1;
+        while (a >= 0 && c[a] < 0) a--;
+        while (b < nt && c[b] < 0) b++;
+        if (a >= 0 && b < nt && b - a <= 5) g[i * na + j] = c[a] + (c[b] - c[a]) * (i - a) / (b - a);
+      }
+    }
     for (let i = 0; i < nt; i++) { // 각도 방향 메우기
       const row = [...Array(na).keys()].filter(j => g[i * na + j] >= 0);
       if (!row.length) continue;
@@ -146,6 +156,39 @@ function collectBody(m, byIndex) {
   return pts;
 }
 
+// 옷 밑 살을 투명하게 뚫어 둔 VRM이 있다(샘플 D). 어깨를 드러내는 옷을 입히려면 그 자리를 메운다.
+// 주변 살색을 해상도를 낮춰 가며 번지게 해서 채우므로 경계가 안 보인다.
+function healSkin(m) {
+  m.heal = new Map(); // 원본 텍스처 → 메운 캔버스 (내보내기가 쓴다)
+  const canvas = (w, h) => { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; };
+  const fix = tex => {
+    const img = tex?.image;
+    if (!img || m.heal.has(tex)) return;
+    const W = img.width, H = img.height, c = canvas(W, H), g = c.getContext('2d', { willReadFrequently: true });
+    g.drawImage(img, 0, 0);
+    const d = g.getImageData(0, 0, W, H), mask = canvas(W, H), mg = mask.getContext('2d'), md = mg.createImageData(W, H);
+    let holes = 0;
+    for (let i = 0; i < W * H; i++) if (d.data[i * 4 + 3] < 250) { md.data[i * 4 + 3] = 255; holes++; }
+    if (!holes) return;
+    mg.putImageData(md, 0, 0);
+    g.globalCompositeOperation = 'destination-out'; // 구멍 둘레의 옛 옷선까지 같이 지운다
+    for (const [x, y] of [[-6, 0], [6, 0], [0, -6], [0, 6], [-4, -4], [4, -4], [-4, 4], [4, 4], [-2, 0], [2, 0], [0, -2], [0, 2]]) g.drawImage(mask, x, y);
+    g.globalCompositeOperation = 'source-over';
+    const levels = [c];
+    for (let w = W >> 1, h = H >> 1; w >= 8; w >>= 1, h >>= 1) { const l = canvas(w, h); l.getContext('2d').drawImage(levels.at(-1), 0, 0, w, h); levels.push(l); }
+    const out = canvas(W, H), og = out.getContext('2d');
+    og.imageSmoothingQuality = 'high';
+    for (let i = levels.length - 1; i >= 0; i--) for (let k = 0; k < (i ? 3 : 1); k++) og.drawImage(levels[i], 0, 0, W, H); // 번 겹쳐야 불투명해진다
+    og.globalCompositeOperation = 'destination-over'; og.drawImage(levels.at(-1), 0, 0, W, H);
+    tex.image = out; tex.needsUpdate = true;
+    m.heal.set(tex, out);
+  };
+  for (const o of m.meshes) {
+    const mat = matOf(o);
+    if (/Body.*SKIN/i.test(mat.name)) { fix(mat.map); fix(mat.shadeMultiplyTexture); }
+  }
+}
+
 const rawPos = (vrm, n) => vrm.humanoid.getRawBoneNode(n).getWorldPosition(new THREE.Vector3());
 
 class Hash { // 가까운 몸 정점 찾기
@@ -191,6 +234,7 @@ export async function loadAvatar(loader, url) {
   };
   m.meshes = [];
   vrm.scene.traverse(o => { if (o.isSkinnedMesh) m.meshes.push(o); });
+  healSkin(m);
   m.fr = frames(m);
   const byIndex = new Map();
   m.pts = collectBody(m, byIndex);

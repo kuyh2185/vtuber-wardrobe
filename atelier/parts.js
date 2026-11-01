@@ -2,7 +2,7 @@
 // 치수는 모두 몸 기준 좌표(t: 무릎 1, 골반 2, 척추 3, 가슴 4, 목 5)라서 체형이 달라도 같은 옷이 나온다.
 import * as THREE from 'three';
 import { torsoPoint, limbPoint, torsoParam } from './body.js';
-import { SIZE } from './tex.js';
+import { SIZE, fold } from './tex.js';
 
 export const TAU = Math.PI * 2;
 export const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
@@ -43,12 +43,22 @@ export function envelope(av) {
     for (let j = 0; j < na; j++) g[i * na + j] = rayHull(h, j / na * TAU - Math.PI);
   }
   const raw = g.slice();
-  for (let pass = 0; pass < 4; pass++) {
-    const c = g.slice();
-    for (let i = 1; i < rows - 1; i++) for (let j = 0; j < na; j++)
-      g[i * na + j] = (c[(i - 1) * na + j] + 2 * c[i * na + j] + c[(i + 1) * na + j]) / 4;
+  // 허리처럼 삼각형이 큰 곳은 지도가 들쭉날쭉해서 그대로 따라가면 천에 물결이 생긴다. 넓게 다듬고,
+  // 어깨 쪽은 모서리가 깎이면 몸 속으로 들어가니 조금만 다듬는다.
+  const blur = (from, n) => {
+    const o = from.slice();
+    for (let pass = 0; pass < n; pass++) {
+      const c = o.slice();
+      for (let i = 1; i < rows - 1; i++) for (let j = 0; j < na; j++)
+        o[i * na + j] = (c[(i - 1) * na + j] + 2 * c[i * na + j] + c[(i + 1) * na + j]) / 4;
+    }
+    return o;
+  };
+  const near = blur(g, 16), far = blur(near, 170);
+  for (let i = 0; i < rows; i++) {
+    const k = sstep(4.15, 4.45, T0 + i * dt);
+    for (let j = 0; j < na; j++) { const q = i * na + j; g[q] = Math.max(far[q] + .001, raw[q] - .001) * (1 - k) + Math.max(near[q], raw[q]) * k; }
   }
-  for (let i = 0; i < g.length; i++) g[i] = Math.max(g[i], raw[i]); // 다듬으면 어깨 모서리가 깎여 몸 속으로 들어간다
   const r = (t, a) => {
     const x = clamp((t - T0) / dt, 0, rows - 1.001), y = (((a + Math.PI) / TAU * na) % na + na) % na;
     const i = Math.floor(x), j = Math.floor(y) % na, u = x - i, v = y - Math.floor(y), j2 = (j + 1) % na;
@@ -187,7 +197,7 @@ export function bodice(O, { ease, top, hem, rect, nu = 96, nv = 48, th = .0025, 
 }
 function invert(g, y) { let lo = 0, hi = 1; for (let i = 0; i < 18; i++) { const m = (lo + hi) / 2; if (g(m) < y) lo = m; else hi = m; } return lo; }
 
-export function sleeve(O, side, { len, ease, rect, nu = 32, nv = 26, th = .002, start = -.1 }) {
+export function sleeve(O, side, { len, ease, rect, nu = 96, nv = 56, th = .0016, start = -.1 }) {
   const av = O.av, l = av.fr[side], M = av.maps[side], other = side === 'AL' ? 'AR' : 'AL';
   const rows = [];
   for (let j = 0; j <= nv; j++) {
@@ -196,7 +206,7 @@ export function sleeve(O, side, { len, ease, rect, nu = 32, nv = 26, th = .002, 
   }
   return shell(O, { nu, nv, closed: true, th, rect, keep: 'arm:' + other,
     f(u, v) {
-      const R = rows[Math.round(v * nv)], a = u * TAU - Math.PI;
+      const R = rows[Math.round(v * nv)], a = u * TAU - Math.PI; // a: 0 팔 윗면, π 팔 아랫면(내리면 몸 쪽)
       const p = limbPoint(l, R.t, a, rayHull(R.h, a) + ease(v, a));
       return [p, p.clone().sub(limbPoint(l, R.t, a, 0))];
     } });
@@ -233,7 +243,7 @@ export function strap(O, S, path, { w, rect, off = .004, th = .002, closed = fal
       }
       const q = C[closed ? (k + 1) % n : Math.min(n, k + 1)], r = C[closed ? (k - 1 + n) % n : Math.max(0, k - 1)];
       const side = q.clone().sub(r).normalize().cross(Nn[k]).normalize();
-      return [C[k].clone().addScaledVector(side, (v - .5) * w), Nn[k]];
+      return [above(O.av, S, C[k].clone().addScaledVector(side, (v - .5) * w), off), Nn[k]]; // 넓은 끈은 어깨 곡면에서 가장자리가 묻힌다
     } });
 }
 
@@ -273,6 +283,94 @@ export function tube(O, pts, { r, rect, keep = 'torso', closed = false, n = 8 })
     } });
 }
 
+// 팔·다리 둘레 고리. 소매 끝과 다리 장식이 쓴다.
+export function limbRing(av, side, t) {
+  const M = av.maps[side], h = ring((tt, a) => M.get(clamp(tt, .02, 2.8), a), t, 32);
+  return a => rayHull(h, a);
+}
+const otherArm = side => (side === 'AL' ? 'AR' : 'AL');
+const limbKeep = side => (side[0] === 'A' ? 'arm:' + otherArm(side) : 'leg:' + side);
+
+// 몸 위의 줄을 따라 붙는 주름 띠: 프릴·레이스·소매단. at(u) = [점, 바깥, 내려가는 방향]
+export function ruffle(O, { at, n = 40, w = .03, amp = .006, rect, closed = true, nu, nv = 5, keep = 'torso', skin, seed = 1, scallop = 0, flare = .4 }) {
+  const m = n * 2;
+  return shell(O, { nu: nu || n * 8, nv, closed, th: .001, rect, keep, skin: skin && ((u, v) => skin(u, v)),
+    f(u, v) {
+      const [p, out, dn] = at(u), h = fold(u, n, seed);
+      const edge = 1 - scallop * (1 - Math.abs(Math.sin(Math.PI * u * m)) ** .5);
+      return [p.clone().addScaledVector(dn, v * w * edge).addScaledVector(out, amp * (h - .5) * (.2 + v * 1.2) + flare * v * w), out];
+    } });
+}
+
+// 다리에 두르는 띠: 가터·리본
+export function legBand(O, side, t, { w, ease = .002, rect, nu = 40, th = .0016 }) {
+  const av = O.av, l = av.fr[side], len = l.pts[0].distanceTo(l.pts[1]);
+  return shell(O, { nu, nv: 2, closed: true, th, rect, keep: limbKeep(side),
+    f(u, v) {
+      const a = u * TAU - Math.PI, tt = t + (v - .5) * w / len, r = limbRing(av, side, tt)(a);
+      const p = limbPoint(l, tt, a, r + (typeof ease === 'function' ? ease(a) : ease));
+      return [p, p.clone().sub(limbPoint(l, tt, a, 0))];
+    } });
+}
+
+// 흔들림 뼈 줄기: 치마처럼 몸에 달린 천 한 벌에 하나. skinAt으로 천 위 점을 줄기에 묶는다.
+export function chainFor(O, { point, cols, nj = 3, keepTop = .12, name = 'skirt', stiff = .55, closed = true }) {
+  const chain = [], hips = O.av.vrm.humanoid.getRawBoneNode('hips');
+  for (let c = 0; c < cols; c++) {
+    const u = closed ? c / cols : c / (cols - 1), pts = [];
+    for (let j = 1; j <= nj; j++) pts.push(point(u, keepTop + (1 - keepTop) * (j - .5) / nj));
+    chain.push({ pts, tip: point(u, 1.08) });
+  }
+  const id = O.chains.push({ name, cols, nj, chain, parent: hips, stiff, closed }) - 1;
+  return (u, v) => { // 줄기 사이·마디 사이를 고르게 나눠 가진다
+    if (v < keepTop) return [[hips, 1]];
+    const y = (v - keepTop) / (1 - keepTop) * nj - .5, j = Math.floor(clamp(y, 0, nj - 1.001)), s = clamp(y - j);
+    const x = closed ? (u % 1) * cols : u * (cols - 1), c = Math.floor(x) % cols, d = closed ? (c + 1) % cols : Math.min(c + 1, cols - 1), q = x - Math.floor(x);
+    const out = [], add = (cc, jj, w) => { if (w > .001) out.push([{ chain: id, c: cc, j: jj }, w]); };
+    const low = y < 0 ? clamp(1 + y * 2) : 0; // 맨 윗마디 위쪽은 골반과 섞어 허리가 안 찢어지게
+    if (low) out.push([hips, low]);
+    const k = 1 - low;
+    add(c, j, (1 - q) * (1 - s) * k); add(d, j, q * (1 - s) * k);
+    if (j + 1 < nj) { add(c, j + 1, (1 - q) * s * k); add(d, j + 1, q * s * k); }
+    else { add(c, j, (1 - q) * s * k); add(d, j, q * s * k); }
+    return out;
+  };
+}
+
+// 겹치마: 허리에서 엉덩이를 타고 내려와 끝에서 종처럼 벌어진다. 층마다 끝이 살짝 들려 층이 보인다.
+// tiers: [{ v0, v1, n 주름 수, amp 주름 깊이, kick 끝 들림, off 반지름 차이, seed, rect, scallop }]
+export function softSkirt(O, { t0, t1, flare, tiers, ease = .004, nc = 14, nj = 3, keepTop = .14, stiff = .5, name = 'skirt' }) {
+  const av = O.av, E = envelope(av), bell = v => flare * (.55 * Math.sin(Math.PI / 2 * clamp(v)) + .45 * v); // 위가 둥글고 끝까지 벌어지는 종 모양
+  const wide = (t, a) => { let m = 0; for (let s = 0; s <= 1.0001; s += .125) m = Math.max(m, E.r(lerp(t0, t, s), a)); return m + ease; };
+  const point = (u, v) => { const a = (u - .5) * TAU, t = lerp(t0, t1, v); return torsoPoint(av.fr, t, a, wide(t, a) + bell(v)); };
+  const skinAt = chainFor(O, { point, cols: nc, nj, keepTop, name, stiff });
+  for (const T of tiers) {
+    const { v0, v1, n, amp, kick = 0, off = 0, seed = 1, rect, scallop = 0, hem = .012 } = T, m = n * 2;
+    shell(O, { nu: n * 9, nv: 14, closed: true, th: .0012, rect, keep: 'hip',
+      f(u, w) {
+        const v = lerp(v0, v1, w), a = (u - .5) * TAU, h = fold(u, n, seed), top = sstep(0, .22, w);
+        const edge = scallop * (1 - Math.abs(Math.sin(Math.PI * u * m)) ** .5) * w ** 4;
+        const t = lerp(t0, t1, v) + w ** 3 * hem * (h - .5) * 2 + edge;
+        const p = torsoPoint(av.fr, t, a, wide(t, a) + bell(v) + off + kick * w ** .8 + amp * (h - .5) * (.3 + .7 * top));
+        return [p, p.clone().sub(axisT(av, t))];
+      },
+      skin: (u, w) => skinAt(u, lerp(v0, v1, w)) });
+  }
+  return { point, skinAt, axis: v => axisT(av, lerp(t0, t1, v)) };
+}
+
+// 치마 위를 지나는 줄: 층 끝 레이스, 허리에 걸친 벨트
+export const skirtRing = (sk, vOf, off = 0) => u => {
+  const v = vOf(u), q = sk.point(u, v), out = q.clone().sub(sk.axis(v)).setY(0).normalize();
+  return [q.addScaledVector(out, off), out, V(0, -1, 0)];
+};
+export function skirtBand(O, sk, vOf, { w, off = .006, rect, nu = 96 }) {
+  const at = skirtRing(sk, vOf, off);
+  return shell(O, { nu, nv: 2, closed: true, th: .0018, rect, keep: 'hip',
+    f(u, v) { const [q, out] = at(u); return [q.addScaledVector(V(0, 1, 0), (.5 - v) * w), out]; },
+    skin: u => sk.skinAt(u, vOf(u)) });
+}
+
 // 치마. 줄기마다 흔들림 뼈가 달린다.
 export function skirt(O, { t0, t1, flare, pleats = 0, depth = 0, rect, nc = 12, nj = 3, ease = .006, panel, keepTop = .12, name = 'skirt', stiff = .55, nv = 26 }) {
   const av = O.av, E = envelope(av), top = t0, wide = (t, a, v) => {
@@ -294,29 +392,8 @@ export function skirt(O, { t0, t1, flare, pleats = 0, depth = 0, rect, nc = 12, 
     }
     return torsoPoint(av.fr, t, a, r);
   };
-  const cols = panel ? Math.max(2, nc) : nc, chain = [], base = O.av.vrm.humanoid.getRawBoneNode('hips');
-  for (let c = 0; c < cols; c++) {
-    const u = panel ? c / (cols - 1) : c / cols, ids = [];
-    for (let j = 1; j <= nj; j++) ids.push(point(u, keepTop + (1 - keepTop) * (j - .5) / nj));
-    chain.push({ pts: ids, tip: point(u, 1.08) });
-  }
-  const chainSet = { name, cols, nj, chain, parent: base, stiff, closed: !panel };
-  const id = O.chains.push(chainSet) - 1;
-  const hips = base;
-  const skinAt = (u, v) => { // 줄기 사이·마디 사이를 고르게 나눠 가진다
-    if (v < keepTop) return [[hips, 1]];
-    const y = (v - keepTop) / (1 - keepTop) * nj - .5, j = Math.floor(clamp(y, 0, nj - 1.001)), s = clamp(y - j);
-    const x = panel ? u * (cols - 1) : (u % 1) * cols, c = Math.floor(x) % cols, d = panel ? Math.min(c + 1, cols - 1) : (c + 1) % cols, q = x - Math.floor(x);
-    const out = [];
-    const add = (cc, jj, w) => { if (w > .001) out.push([{ chain: id, c: cc, j: jj }, w]); };
-    const low = y < 0 ? clamp(1 + y * 2) : 0; // 맨 윗마디 위쪽은 골반과 섞어 허리가 안 찢어지게
-    if (low) out.push([hips, low]);
-    const k = 1 - low;
-    add(c, j, (1 - q) * (1 - s) * k); add(d, j, q * (1 - s) * k);
-    if (j + 1 < nj) { add(c, j + 1, (1 - q) * s * k); add(d, j + 1, q * s * k); }
-    else { add(c, j, (1 - q) * s * k); add(d, j, q * s * k); }
-    return out;
-  };
+  const cols = panel ? Math.max(2, nc) : nc;
+  const skinAt = chainFor(O, { point, cols, nj, keepTop, name, stiff, closed: !panel });
   shell(O, { nu: pleats ? pleats * 6 : 64, nv, closed: !panel, th: .0022, rect, keep: 'hip',
     f(u, v) {
       const p = point(u, v), t = lerp(t0, t1, v);
@@ -333,16 +410,6 @@ export function collar(O, S, { a, top, edge, rect, off = .006, nu = 80, nv = 10,
       const an = a(u), t = lerp(top(an), edge(an), v);
       const p = S(t, an, off + lift * Math.sin(Math.PI * v));
       return [p, p.clone().sub(axisT(O.av, t))];
-    } });
-}
-
-// 프릴·레이스: 옷단을 따라 물결치는 띠
-export function frill(O, { ring: at, rect, nu = 180, waves = 40, w = .022, amp = .006, keep = 'hip', skin }) {
-  return shell(O, { nu, nv: 3, closed: true, th: .0012, rect, keep, skin,
-    f(u, v) {
-      const [p, out, dn] = at(u);
-      const wob = Math.sin(u * TAU * waves) * amp * (.3 + v);
-      return [p.clone().addScaledVector(dn, v * w).addScaledVector(out, wob + v * .006), out];
     } });
 }
 
@@ -375,7 +442,8 @@ export function bindWeights(O) {
     if (cus) { put(v, cus); continue; }
     p.set(O.pos[v * 3], O.pos[v * 3 + 1], O.pos[v * 3 + 2]);
     const k = O.keep[v] || 'torso';
-    const ok = k.startsWith('arm:') ? (other => q => (q.seg[other] || 0) < .3)(k.slice(4)) : filters[k];
+    const ok = k.startsWith('arm:') ? (other => q => (q.seg[other] || 0) < .3)(k.slice(4))
+      : k.startsWith('leg:') ? (leg => q => (q.seg[leg] || 0) > .5)(k.slice(4)) : filters[k];
     const near = av.hash.near(p, 6, ok), list = [];
     for (const [d, q] of near) { const w = 1 / (d + 1e-5); for (const [b, bw] of q.bones) list.push([b, bw * w]); }
     put(v, list);

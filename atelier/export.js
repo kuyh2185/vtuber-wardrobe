@@ -70,6 +70,22 @@ export async function exportVrm(av, w, canvas) {
   }
   j.meshes.forEach(m => { if (m.primitives === null) m.primitives = []; });
 
+  // 메운 살 그림으로 바꾸기: 화면과 같아야 어깨 드러낸 옷이 파일에서도 뚫려 보이지 않는다
+  const skinMat = av.meshes.map(o => [].concat(o.material)[0]).find(m => /Body.*SKIN/i.test(m.name));
+  const healed = [['_MainTex', skinMat?.map], ['_ShadeTexture', skinMat?.shadeMultiplyTexture]];
+  for (const [prop, tex] of healed) {
+    const c = av.heal?.get(tex);
+    if (!c) continue;
+    const u = new Uint8Array(await (await new Promise(r => c.toBlob(r, 'image/png'))).arrayBuffer());
+    j.images.push({ name: 'Skin' + prop, mimeType: 'image/png', bufferView: add(u) });
+    j.textures.push({ sampler: 0, source: j.images.length - 1 });
+    j.extensions.VRM.materialProperties.forEach((mp, i) => {
+      if (!/Body.*SKIN/i.test(mp.name)) return;
+      mp.textureProperties[prop] = j.textures.length - 1;
+      if (prop === '_MainTex') j.materials[i].pbrMetallicRoughness.baseColorTexture.index = j.textures.length - 1;
+    });
+  }
+
   // 그림
   const blob = await new Promise(r => canvas.toBlob(r, 'image/png'));
   const png = new Uint8Array(await blob.arrayBuffer());

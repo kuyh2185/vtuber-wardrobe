@@ -46,7 +46,7 @@ const info = () => pg.evaluate(() => ({ verts: __S.w.verts, look: __S.look, step
 
 await shot('1_start');
 const facts = [];
-for (const look of ['고딕 세일러', '다크 치파오', '다크 스트리트 후드']) {
+for (const look of ['레이스 프릴 드레스', '슬립과 흘러내린 재킷', '고딕 코르셋', '고딕 세일러', '다크 치파오', '오프숄더 스트릿']) {
   await card(look).click();
   for (const body of ['작은 체형', '큰 체형', '보통 체형']) {
     await card(body).click();

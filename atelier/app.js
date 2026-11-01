@@ -46,7 +46,7 @@ loader.register(p => new VRMLoaderPlugin(p));
 const canvas = document.createElement('canvas');
 canvas.width = canvas.height = SIZE;
 
-const S = { step: 0, av: null, avs: {}, look: 'hood', params: {}, w: null, raw: false, motion: 'idle', t: 0, vote: null, tease: false, cover: 0 };
+const S = { step: 0, av: null, avs: {}, look: Object.keys(LOOKS)[0], params: {}, w: null, raw: false, motion: 'idle', t: 0, vote: null, tease: false, cover: 0 };
 window.__S = S;
 
 function fit() {
@@ -195,7 +195,7 @@ function picks(el, list, cur, on) {
 
 function renderStart() {
   body.append(h('<h2>옷을 받는 게 아니라, 직접 만들어요</h2>'));
-  body.append(h('<p class="lead">아래 세 벌은 완성품이 아니라 출발점이에요. 고른 뒤 길이·품·색·글자를 바꾸면 내 캐릭터 몸에 맞춰 그 자리에서 다시 만들어집니다.</p>'));
+  body.append(h('<p class="lead">아래 옷은 완성품이 아니라 출발점이에요. 고른 뒤 길이·품·색·글자를 바꾸면 내 캐릭터 몸에 맞춰 그 자리에서 다시 만들어집니다.</p>'));
   body.append(h('<h3>시작할 옷</h3>'));
   const a = h('<div class="pick"></div>');
   picks(a, Object.entries(LOOKS).map(([id, l]) => [id, l.label, l.why]), S.look, setLook);

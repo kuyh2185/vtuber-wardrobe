@@ -19,7 +19,7 @@ import { SIZE } from './tex.js';
 
 // ?look=hood &m=D &yaw=도 &zoom=1 &y=비율 &p={"len":.3}
 const q = new URLSearchParams(location.search);
-const look = LOOKS[q.get('look') || 'hood'];
+const look = LOOKS[q.get('look') || 'frill'];
 const name = `AvatarSample_${q.get('m') || 'D'}.vrm`;
 const yaw = (+q.get('yaw') || 0) * Math.PI / 180, zoom = +q.get('zoom') || 1, cy = +q.get('y') || .5;
 const over = q.get('p') ? JSON.parse(q.get('p')) : {};
@@ -62,11 +62,13 @@ cam.position.set(Math.sin(yaw) * D, H * cy, Math.cos(yaw) * D);
 cam.lookAt(0, H * cy, 0);
 for (let i = 0; i < 60; i++) vrm.update(1 / 60);
 renderer.render(scene, cam);
-window.__info = { ms: Math.round(ms), verts: w.verts, chains: w.joints.length, poke: poke(av, w.O) };
+const E = w.O.av.env;
+window.__info = { ms: Math.round(ms), verts: w.verts, chains: w.joints.length, poke: poke(av, w.O), land: E && { tw: +E.tw.toFixed(2), th: +E.th.toFixed(2), tb: +E.tb.toFixed(2), ts: +E.ts.toFixed(2) } };
 if (q.get('out')) {
   const b = await exportVrm(av, w, canvas);
   let t = ''; for (let i = 0; i < b.length; i += 32768) t += String.fromCharCode(...b.subarray(i, i + 32768));
   window.__out = btoa(t);
 }
+window.__dbg = { w, av, renderer, scene, cam, vrm };
 window.__ready = true;
 </script>
