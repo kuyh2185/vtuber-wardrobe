@@ -13,7 +13,7 @@ def toon(m, alpha=None, tex=None):
     t.alpha_mode = 'BLEND' if alpha is not None else 'OPAQUE'
     t.double_sided = True
     x = t.extensions.vrmc_materials_mtoon
-    x.shade_color_factor = (c[0] * .86, c[1] * .74, c[2] * .82)
+    x.shade_color_factor = (c[0] * .84, c[1] * .76, c[2] * .86)   # 그늘은 라일락 쪽으로
     x.shading_shift_factor = -.25
     x.shading_toony_factor = .75
     if tex:

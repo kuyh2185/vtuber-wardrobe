@@ -17,23 +17,25 @@ def smooth(*os_):
 
 def build_skirt():
     petti()
-    o = skirt('Skirt', width=1.2, hem=2.35, length=.315, pleats=30, top_r=ring(R, WAIST_Z, .004), top_z=WAIST_Z, amp=.003, bend=.7, mass=.12)
+    o = skirt('Skirt', width=1.2, hem=2.2, length=.315, pleats=14, top_r=ring(R, WAIST_Z, .004), top_z=WAIST_Z, amp=.004, bend=2.2, mass=.12)
     paint(o, mat('Pink', PINK))
     bpy.data.objects['Petti'].hide_set(True)
     build_veil(o)
 
 
-def build_veil(sk, rows=26, cols=160, drop=.03):
+def build_veil(sk, rows=26, cols=160, drop=.006):
     """비치는 겉천: 구운 치마를 띄워 잔주름을 덮는다(따로 시뮬레이션하면 한쪽으로 처짐)"""
     import numpy as np
     co = np.array([v.co[:] for v in sk.data.vertices]).reshape(rows, cols, 3)
     x, y = co[..., 0], (co[..., 1] - CY) / RY
     r, a = np.hypot(x, y), np.arctan2(y, x)
-    k = np.ones(9) / 9
+    from numpy.lib.stride_tricks import sliding_window_view as win
     out = []
     for i in range(rows):
-        wide = np.convolve(np.r_[r[i][-4:], r[i], r[i][:4]], k, 'valid')
-        r2 = np.maximum(r[i], wide) + .002 + .006 * i / (rows - 1)
+        # 주름 마루를 다 덮는 껍질을 부드럽게 편다: 겉천 끝선이 주름을 따라 들쭉날쭉하지 않게
+        hull = win(np.r_[r[i][-7:], r[i], r[i][:6]], 14).max(1)
+        wide = win(np.r_[hull[-13:], hull, hull[:13]], 27).mean(1)
+        r2 = wide + .002 + .006 * i / (rows - 1)
         out.append(np.stack([r2 * np.cos(a[i]), r2 * RY * np.sin(a[i]) + CY, co[i, :, 2]], 1))
     d = out[-1] - out[-3]
     d /= np.linalg.norm(d, axis=1, keepdims=True)
@@ -99,6 +101,19 @@ def collide(name, on):
     bpy.data.objects[name].collision.use = on
 
 
+def roll(o, rows, cols, lobes):
+    """구운 프릴을 둥글게 말고 끝선을 물결지게: 곧은 세로 주름이 판자처럼 보이는 걸 막는다"""
+    for v in o.data.vertices:
+        q = (v.index // cols) / (rows - 1)
+        x, y = v.co.x, (v.co.y - CY) / RY
+        r, a = math.hypot(x, y), math.atan2(y, x)
+        w = lobes * a + 1.4 * q                 # 아래로 갈수록 주름 줄기가 비스듬히 휜다
+        r += .012 * math.sin(math.pi * q) + .013 * q * math.sin(w)
+        v.co.x, v.co.y = r * math.cos(a), r * RY * math.sin(a) + CY
+        v.co.z += .005 * q * q * math.cos(w)
+    o.data.update()
+
+
 def build_ruffle():
     """밑단 밖으로 나오는 흰 프릴: 안쪽 좁은 틀 위에 달아 겉치마 밑으로 내려옴"""
     collide('Petti', False)
@@ -108,8 +123,9 @@ def build_ruffle():
     p2.data.update()
     p2.modifiers.new('col', 'COLLISION')
     p2.collision.thickness_outer = .004
-    o = skirt('Ruffle', width=2.7, hem=3.3, length=.10, rows=11, cols=210, pleats=46, top_z=.855,
-              top_r=ellipse(.203, .203 * RY, CY), amp=.005, frames=60, bend=.25, mass=.08, seed=7)
+    o = skirt('Ruffle', width=2.2, hem=2.9, length=.10, rows=11, cols=210, pleats=24, top_z=.855,
+              top_r=ellipse(.203, .203 * RY, CY), amp=.012, frames=60, bend=.8, mass=.08, seed=7)
+    roll(o, rows=11, cols=210, lobes=24)
     paint(o, mat('White', WHITE))
     bpy.data.objects.remove(p2, do_unlink=True)
     collide('Petti', True)
