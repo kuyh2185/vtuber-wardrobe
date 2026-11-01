@@ -1,0 +1,30 @@
+// node atelier/shot.mjs out/폴더 [src] : view.html을 앞·옆·뒤·걷기·팔 들기로 찍는다.
+import { createRequire } from 'module';
+import { spawn } from 'child_process';
+import { mkdirSync } from 'fs';
+const require = createRequire(import.meta.url);
+const { chromium } = require(process.env.PLAYWRIGHT || 'playwright');
+const out = process.argv[2] || 'out/shot', src = process.argv[3] || '../out/blender-hanbok.vrm';
+mkdirSync(out, { recursive: true });
+const srv = spawn('python', ['-m', 'http.server', '8124', '--bind', '127.0.0.1'], { stdio: 'ignore' });
+await new Promise(r => setTimeout(r, 1200));
+const b = await chromium.launch({ channel: 'chrome', args: ['--use-gl=angle', '--enable-webgl', '--ignore-gpu-blocklist'] });
+const shot = async (name, q, act) => {
+  const p = await b.newPage({ viewport: { width: 640, height: 880 } });
+  p.on('pageerror', e => console.log('오류', e.message));
+  await p.goto(`http://127.0.0.1:8124/atelier/view.html?src=${src}&${q}`);
+  await p.waitForFunction('window.__ready', null, { timeout: 90000 });
+  if (act) await p.evaluate(act);
+  await p.screenshot({ path: `${out}/${name}.png` });
+  if (name === 'front') console.log(await p.evaluate('window.__info'));
+  await p.close();
+};
+await shot('shoulder', 'yaw=28&zoom=3.4&y=.74');
+await shot('front', 'yaw=0');
+await shot('back', 'yaw=180');
+await shot('side', 'yaw=70');
+await shot('close', 'yaw=25&zoom=2.1&y=.68');
+await shot('walk', 'yaw=30', '__walk(34)');
+await shot('wave', 'yaw=20', '__wave()');
+await b.close();
+srv.kill();

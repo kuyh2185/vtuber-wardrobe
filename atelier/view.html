@@ -1,0 +1,79 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>VRM 보기</title>
+<style>html,body{margin:0;height:100%;background:#25222e}canvas{display:block}</style>
+<script type="importmap">{"imports":{
+  "three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+  "three/addons/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/",
+  "@pixiv/three-vrm":"https://cdn.jsdelivr.net/npm/@pixiv/three-vrm@3.4.2/lib/three-vrm.module.min.js"
+}}</script>
+<script type="module">
+// 만든 VRM을 사이트와 같은 조명으로 본다. ?src=../out/x.vrm &yaw=도 &zoom=1 &y=비율 &pose=stand|walk|arms
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
+
+const q = new URLSearchParams(location.search);
+const yaw = (+q.get('yaw') || 0) * Math.PI / 180, zoom = +q.get('zoom') || 1, cy = +q.get('y') || .5;
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setSize(innerWidth, innerHeight);
+document.body.append(renderer.domElement);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color('#25222e');
+const cam = new THREE.PerspectiveCamera(22, innerWidth / innerHeight, .1, 50);
+scene.add(new THREE.AmbientLight(0xffffff, .92));
+const key = new THREE.DirectionalLight(0xffffff, 1.5);
+key.position.set(-1, 2, 2.4);
+Object.assign(key.shadow.camera, { left: -1, right: 1, top: 1.8, bottom: -.2, near: .1, far: 8 });
+key.shadow.mapSize.set(2048, 2048); key.shadow.normalBias = .004; key.castShadow = true;
+renderer.shadowMap.enabled = true;
+scene.add(key);
+
+const loader = new GLTFLoader();
+loader.register(p => new VRMLoaderPlugin(p));
+const gltf = await loader.loadAsync(q.get('src') || '../out/blender-hanbok.vrm');
+const vrm = gltf.userData.vrm;
+VRMUtils.rotateVRM0(vrm);
+vrm.scene.traverse(o => { if (o.isMesh) { o.receiveShadow = true; o.castShadow = ![].concat(o.material).some(m => m.transparent); } });
+(q.get('hide') || '').split(',').filter(Boolean).forEach(n => { vrm.scene.traverse(o => { if (o.name === n) o.visible = false; }); });
+scene.add(vrm.scene);
+vrm.scene.updateMatrixWorld(true);
+
+const h = vrm.humanoid, s = vrm.meta.metaVersion === '0' ? 1 : -1;
+const bone = n => h.getNormalizedBoneNode(n);
+function stand() {
+  bone('leftUpperArm').rotation.z = s * 1.2; bone('rightUpperArm').rotation.z = -s * 1.2;
+  bone('leftLowerArm').rotation.z = s * .12; bone('rightLowerArm').rotation.z = -s * .12;
+}
+stand();
+vrm.update(0);
+vrm.scene.updateMatrixWorld(true);
+const H = 1.6 * 1.16, D = H / 2 / Math.tan(cam.fov * Math.PI / 360) * 1.04 / zoom;
+cam.position.set(Math.sin(yaw) * D, H * cy, Math.cos(yaw) * D);
+cam.lookAt(0, H * cy, 0);
+for (let i = 0; i < 90; i++) vrm.update(1 / 60);
+renderer.render(scene, cam);
+
+// 움직임 확인: t초 시점 자세로 흔들림까지 돌려 그린다
+window.__walk = (n = 40) => {
+  for (let i = 0; i < n; i++) {
+    const t = i / 60 * 6.28 * 1.2, a = Math.sin(t) * .55;
+    bone('leftUpperLeg').rotation.x = a; bone('rightUpperLeg').rotation.x = -a;
+    bone('leftLowerLeg').rotation.x = Math.max(0, -a) * .9; bone('rightLowerLeg').rotation.x = Math.max(0, a) * .9;
+    bone('hips').rotation.y = Math.sin(t) * .2;
+    vrm.update(1 / 60);
+  }
+  renderer.render(scene, cam);
+};
+window.__wave = () => {
+  bone('leftUpperArm').rotation.z = -s * .4; bone('rightUpperArm').rotation.z = s * 1.1;
+  bone('leftLowerArm').rotation.y = s * 1.2;
+  for (let i = 0; i < 30; i++) vrm.update(1 / 60);
+  renderer.render(scene, cam);
+};
+window.__info = {
+  meshes: [], tris: renderer.info.render.triangles, calls: renderer.info.render.calls,
+};
+vrm.scene.traverse(o => { if (o.isMesh) window.__info.meshes.push(o.name); });
+window.__ready = true;
+</script>
