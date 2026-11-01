@@ -50,6 +50,6 @@ if (q.get('kick')) {
 }
 renderer.render(scene, cam);
 let tris = 0; vrm.scene.traverse(o => { if (o.isMesh && o.geometry.index) tris += o.geometry.index.count / 3; });
-window.__info = { version: vrm.meta.metaVersion, title: vrm.meta.name ?? vrm.meta.title, outfit: !!vrm.scene.getObjectByName('Outfit'), allJoints: vrm.springBoneManager.joints.size, outfitJoints: joints.length, moved: +moved.toFixed(3), expr: vrm.expressionManager.expressions.length, tris };
+window.__info = { version: vrm.meta.metaVersion, title: vrm.meta.name ?? vrm.meta.title, outfit: !!vrm.scene.getObjectByName('Outfit'), sheer: (() => { let n = 0; vrm.scene.traverse(o => { if (o.isMesh && [].concat(o.material).some(m => /Sheer/.test(m.name) && m.transparent)) n++; }); return n; })(), allJoints: vrm.springBoneManager.joints.size, outfitJoints: joints.length, moved: +moved.toFixed(3), expr: vrm.expressionManager.expressions.length, tris };
 window.__ready = true;
 </script>

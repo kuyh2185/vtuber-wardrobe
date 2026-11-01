@@ -24,9 +24,12 @@ renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 stage.prepend(renderer.domElement);
 const scene = new THREE.Scene();
 const cam = new THREE.PerspectiveCamera(20, 1, .1, 50);
-scene.add(new THREE.AmbientLight(0xffffff, 1));
-const keyL = new THREE.DirectionalLight(0xfff4ee, 2.1); keyL.position.set(-1, 2, 2.4); scene.add(keyL);
-const rimL = new THREE.DirectionalLight(0xc8a8ff, .9); rimL.position.set(2, 1.5, -2); scene.add(rimL);
+scene.add(new THREE.AmbientLight(0xffffff, .92)); // 너무 밝으면 흰 천의 그늘이 날아가 옷이 납작해진다
+const keyL = new THREE.DirectionalLight(0xfff4ee, 1.5); keyL.position.set(-1, 2, 2.4); scene.add(keyL);
+Object.assign(keyL.shadow.camera, { left: -1.2, right: 1.2, top: 1.8, bottom: -.2, near: .1, far: 8 });
+keyL.shadow.mapSize.set(2048, 2048); keyL.shadow.normalBias = .004; keyL.castShadow = true;
+renderer.shadowMap.enabled = true;
+const rimL = new THREE.DirectionalLight(0xc8a8ff, .5); rimL.position.set(2, 1.5, -2); scene.add(rimL);
 const floor = (() => {
   const c = document.createElement('canvas'); c.width = c.height = 256;
   const g = c.getContext('2d'), r = g.createRadialGradient(128, 128, 10, 128, 128, 128);
@@ -233,6 +236,7 @@ async function mine(file) {
 function prep(av) {
   hideOld(av);
   if (av.v0) VRMUtils.rotateVRM0(av.vrm);
+  av.vrm.scene.traverse(o => { if (o.isMesh) o.castShadow = o.receiveShadow = true; });
   av.hip0 = av.vrm.humanoid.getNormalizedBoneNode('hips').position.y;
 }
 

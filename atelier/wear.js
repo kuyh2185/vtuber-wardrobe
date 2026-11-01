@@ -21,7 +21,8 @@ export function makeMaterials(tex) {
     outlineColorFactor: new THREE.Color(.05, .04, .08), outlineLightingMixFactor: .5 });
   line.isOutline = true;
   line.side = THREE.BackSide;
-  return { body, line };
+  const sheer = new MToonMaterial({ ...opt, transparent: true, depthWrite: false, side: THREE.DoubleSide });
+  return { body, line, sheer };
 }
 
 // 옷이 덮는 살은 숨긴다. 그래야 움직일 때 살이 옷을 뚫고 나오지 않는다.
@@ -60,7 +61,7 @@ export function remove(av, w) {
   for (const o of w.meshes) { o.parent.remove(o); o.geometry.dispose(); }
   for (const j of w.joints) av.vrm.springBoneManager.deleteJoint(j);
   for (const b of w.bones) if (b.parent) b.parent.remove(b);
-  av.vrm.materials = av.vrm.materials?.filter(m => m !== w.mats.body && m !== w.mats.line);
+  av.vrm.materials = av.vrm.materials?.filter(m => !Object.values(w.mats).includes(m));
 }
 
 // 치수를 다른 체형(from)에서 재단해 키 비율만 맞춘 옷: "보정 전" 화면용.
@@ -70,7 +71,7 @@ export function fromOther(av, from, build, params) {
   const k = av.fr.H / from.fr.H;
   const scale = O.pos.map(x => x * k);
   O.pos = scale;
-  O.av = av;
+  O.av = av; O.tol = 0; // 다른 체형에서 재단한 옷은 살이 안 숨겨지니 조인 만큼도 뚫림이다
   const hips = av.vrm.humanoid.getRawBoneNode('hips');
   for (const c of O.chains) {
     c.parent = hips;
@@ -89,7 +90,7 @@ export function poke(av, O) {
     const c = torsoParam(av.fr, p);
     if (c.t < 2 || c.t > 5.2) continue;
     tot++;
-    if (c.r < M.get(c.t, c.a) - .0015) { n++; pts.push(av.f * p.x, p.y, av.f * p.z); }
+    if (c.r < M.get(c.t, c.a) - .0015 - (O.tol || 0)) { n++; pts.push(av.f * p.x, p.y, av.f * p.z); }
   }
   return { n, tot, pts };
 }
@@ -135,14 +136,22 @@ export function wear(av, build, params, canvas, prev, from) {
     }
   }
   const skeleton = new THREE.Skeleton([...skel.bones, ...bones], [...skel.boneInverses, ...inv]);
-  const mk = m => {
-    const o = new THREE.SkinnedMesh(g, m);
+  const mk = (m, geo = g) => {
+    const o = new THREE.SkinnedMesh(geo, m);
     o.frustumCulled = false;
     o.bind(skeleton, av.body.bindMatrix);
     av.body.parent.add(o);
     return o;
   };
   const meshes = [mk(mats.body), mk(mats.line)];
+  meshes[0].castShadow = meshes[0].receiveShadow = true;
+  if (O.idxS.length) { // 위치·뼈 데이터는 같이 쓰고 면 목록만 다르다
+    const gs = new THREE.BufferGeometry();
+    for (const k in g.attributes) gs.setAttribute(k, g.attributes[k]);
+    gs.setIndex(O.idxS);
+    const o = mk(mats.sheer, gs); o.renderOrder = 1; o.receiveShadow = true;
+    meshes.push(o);
+  }
   av.vrm.scene.updateMatrixWorld(true); // setInitState가 bone.matrix를 읽으므로 새 뼈 행렬부터 맞춘다
 
   // 골반·허리 충돌체까지 쓰면 치마 뿌리가 몸 안에서 시작해 수평으로 튕겨 나간다. 다리 아래쪽만 쓴다.
@@ -156,6 +165,6 @@ export function wear(av, build, params, canvas, prev, from) {
     mgr.addJoint(j); j.setInitState(); joints.push(j);
   }
   if (!av.vrm.materials) av.vrm.materials = [];
-  av.vrm.materials.push(mats.body, mats.line);
+  av.vrm.materials.push(...Object.values(mats));
   return { O, skin, meshes, bones, invs: inv, joints, mats, tex, made, hidden, verts: O.pos.length / 3 };
 }

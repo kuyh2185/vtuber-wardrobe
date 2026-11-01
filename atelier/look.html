@@ -19,7 +19,7 @@ import { SIZE } from './tex.js';
 
 // ?look=hood &m=D &yaw=도 &zoom=1 &y=비율 &p={"len":.3}
 const q = new URLSearchParams(location.search);
-const look = LOOKS[q.get('look') || 'frill'];
+const look = LOOKS[q.get('look') || 'hanbok'];
 const name = `AvatarSample_${q.get('m') || 'D'}.vrm`;
 const yaw = (+q.get('yaw') || 0) * Math.PI / 180, zoom = +q.get('zoom') || 1, cy = +q.get('y') || .5;
 const over = q.get('p') ? JSON.parse(q.get('p')) : {};
@@ -30,9 +30,12 @@ document.body.append(renderer.domElement);
 const scene = new THREE.Scene();
 scene.background = new THREE.Color('#25222e');
 const cam = new THREE.PerspectiveCamera(22, innerWidth / innerHeight, .1, 50);
-scene.add(new THREE.AmbientLight(0xffffff, 1.0));
-const key = new THREE.DirectionalLight(0xffffff, 2.1);
+scene.add(new THREE.AmbientLight(0xffffff, .92));
+const key = new THREE.DirectionalLight(0xffffff, 1.5);
 key.position.set(-1, 2, 2.4);
+Object.assign(key.shadow.camera, { left: -1, right: 1, top: 1.8, bottom: -.2, near: .1, far: 8 });
+key.shadow.mapSize.set(2048, 2048); key.shadow.normalBias = .004; key.castShadow = true;
+renderer.shadowMap.enabled = true;
 scene.add(key);
 
 const loader = new GLTFLoader();
@@ -43,6 +46,7 @@ canvas.width = canvas.height = SIZE;
 hideOld(av);
 const vrm = av.vrm;
 if (av.v0) VRMUtils.rotateVRM0(vrm);
+vrm.scene.traverse(o => { if (o.isMesh) o.castShadow = o.receiveShadow = true; });
 scene.add(vrm.scene);
 vrm.scene.updateMatrixWorld(true); // 흔들림 뼈 끝점은 월드 좌표로 기억되므로 돌린 뒤에 입힌다
 const t0 = performance.now();

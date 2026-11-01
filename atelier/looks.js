@@ -1,6 +1,6 @@
 // 옷 목록. 값은 전부 사용자가 고칠 수 있는 손잡이(params)다.
 import * as THREE from 'three';
-import { envelope, surf, bodice, sleeve, ruffle, softSkirt, skirtRing, skirtBand, limbRing, legBand, strap, patch, lump, tube, skirt, collar, shell, lerp, sstep, clamp, TAU, axisT, normalAt, above } from './parts.js';
+import { cinch, envelope, surf, bodice, sleeve, ruffle, softSkirt, skirtRing, skirtBand, limbRing, legBand, strap, patch, lump, tube, skirt, collar, shell, lerp, sstep, clamp, TAU, axisT, normalAt, above } from './parts.js';
 import { limbPoint } from './body.js';
 import * as P from './tex.js';
 
@@ -12,6 +12,7 @@ function common(O, pal) {
   O.flat = col => O.rect(24, 24, (c, r) => P.fill(c, r, typeof col === 'function' ? col() : col));
 }
 const onBody = (S, av, t, a, off) => { const p = S(t, a, off); return [p, p.clone().sub(axisT(av, t))]; };
+const snug = (O, E, ease, amt = .013) => { const c = cinch(E, amt); O.tol = amt; return (t, a) => ease(t, a) + c(t, a); }; // 허리 재단을 옷 여유에 얹는다
 const around = (t, n = 56) => { const l = []; for (let i = 0; i <= n; i++) l.push([t, i / n * TAU - Math.PI]); return l; };
 
 // 납작한 금속판: 버클·핀. 모서리만 둥글린 슈퍼타원이라 공처럼 안 보인다.
@@ -27,7 +28,7 @@ function plate(O, p, nrm, w, h, rect) {
 }
 
 // 리본: 나비 두 날개 + 매듭 + 꼬리. 넥타이·스카프 공용.
-function bow(O, S, p, n, { w, h, rect, tail = 0, keep = 'torso', free = 0 }) {
+function bow(O, S, p, n, { w, h, rect, tail = 0, keep = 'torso', free = 0, float = 0 }) {
   const N = n.clone().normalize(), X = V(0, 1, 0).cross(N).normalize(), Y = N.clone().cross(X);
   const up = q => (free ? q : above(O.av, S, q, .002)); // free: 몸통 위가 아닌 곳(다리)에 달 때
   const lobe = s => shell(O, { nu: 16, nv: 10, closed: true, rect, inner: false, keep,
@@ -35,7 +36,7 @@ function bow(O, S, p, n, { w, h, rect, tail = 0, keep = 'torso', free = 0 }) {
       const a = u * TAU, x = v, pinch = .22 + .78 * Math.sin(Math.PI * clamp(x * .92 + .08)) ** .55;
       const c = p.clone().addScaledVector(X, s * x * w).addScaledVector(Y, x * h * .12);
       const d = Y.clone().multiplyScalar(Math.cos(a) * h * pinch).addScaledVector(N, Math.sin(a) * h * .34 * pinch);
-      return [up(c.clone().add(d)), d.clone().addScaledVector(X, s * (x - .5))];
+      return [(float ? c.clone().add(d) : up(c.clone().add(d))), d.clone().addScaledVector(X, s * (x - .5))];
     } });
   lobe(-1); lobe(1);
   if (tail) for (const s of [-1, 1]) {
@@ -57,9 +58,9 @@ function sailor(O, p) {
   const av = O.av, E = envelope(av), pal = p.pal;
   common(O, pal);
   const hem = E.tw - .14;
-  const ease = (t, a) => .0045 + .006 * sstep(E.tb + .1, E.tb - .2, t);
+  const ease = snug(O, E, (t, a) => .0045 + .006 * sstep(E.tb + .1, E.tb - .2, t));
   const S = surf(av, ease);
-  O.cover = [hem + .08, E.ts - .1];
+  O.cover = [E.tw - .75, E.ts - .1];
   const deep = lerp(4.86, 4.62, p.neck);
   const top = a => {
     const f = clamp(Math.abs(a) / .62);
@@ -256,14 +257,14 @@ function street(O, p) {
   common(O, pal);
   const hem = E.tw - .22, front = E.tb + .34;
   const top = a => { const f = Math.abs(a); return lerp(lerp(front, E.ts - .16, sstep(.7, 1.5, f)), E.tb + .28, sstep(1.9, 2.6, f)); };
-  const ease = (t, a) => {
+  const ease = snug(O, E, (t, a) => {
     const f = Math.abs(a), side = Math.exp(-(((f - Math.PI / 2) / .55) ** 2));
     const drape = .002 + .018 * p.loose * sstep(E.tb + .1, E.tb - .35, t) * (1 - sstep(hem + .35, hem + .06, t) * .85);
     const ruche = (Math.sin(TAU * (t * 3.4 + a * .55)) + 1) * .0026 * side * sstep(E.tb, E.tw, t);
     return .0032 + drape + ruche;
-  };
+  }, lerp(.013, .005, p.loose));
   const S = surf(av, ease);
-  O.cover = [hem + .1, E.tb + .1];
+  O.cover = [E.tw - .75, E.tb + .1];
   const bodyR = O.rect(1000, 460, (c, r) => {
     P.fill(c, r, pal.a); P.folds(c, r, 13, 10, .05, .03); P.shade(c, r, 0, .16);
     const cx = r.x + r.w / 2;
@@ -342,9 +343,9 @@ function slipJacket(O, p) {
   const av = O.av, E = envelope(av), pal = p.pal;
   common(O, pal);
   const hem = E.tw - .36, top = sweetheart(E);
-  const ease = (t, a) => .0038 + .0012 * (Math.sin(TAU * (t * 4.2 + Math.sin(a * 2) * .22)) + 1) * sstep(E.tb - .2, E.tw - .2, t);
+  const ease = snug(O, E, (t, a) => .0038 + .0012 * (Math.sin(TAU * (t * 4.2 + Math.sin(a * 2) * .22)) + 1) * sstep(E.tb - .2, E.tw - .2, t), .008);
   const S = surf(av, ease);
-  O.cover = [hem + .1, E.tb + .1];
+  O.cover = [E.tw - .75, E.tb + .1];
   const bodyR = O.rect(1000, 420, (c, r) => {
     P.fill(c, r, pal.a);
     P.folds(c, r, 23, 14, .1, .05); P.shade(c, r, .05, .08);
@@ -407,7 +408,7 @@ function gothic(O, p) {
   const hem = E.tw - .25, shirtTop = () => 5.08;
   const shirtEase = (t, a) => .004 + .003 * sstep(E.tb + .2, E.tb - .2, t);
   const shirt = surf(av, shirtEase);
-  O.cover = [hem + .1, 4.9];
+  O.cover = [E.tw - .75, 4.9];
   const shR = O.rect(1000, 380, (c, r) => { P.fill(c, r, pal.c); const cx = r.x + r.w / 2; P.stitch(c, cx, r.y, cx, r.y + r.h, 'rgba(0,0,0,.2)'); });
   bodice(O, { ease: shirtEase, top: shirtTop, hem: () => E.tb - .1, rect: shR, nu: 96, nv: 36 });
   // 셔츠 깃: 앞에서 벌어진 뾰족한 두 장
@@ -422,7 +423,7 @@ function gothic(O, p) {
   plate(O, nq.clone().add(V(0, 0, .009)), nn, .0085, .0085, O.metal);
 
   // 코르셋: 가슴 아래부터 허리까지 몸에 붙는 검정
-  const ease = (t, a) => .0058;
+  const ease = snug(O, E, () => .0058, .016);
   const S = surf(av, ease), top = a => { const f = Math.abs(a); return lerp(lerp(E.tb + .12, E.tb + .2, sstep(.05, .5, f)), E.tb + .05, sstep(1, 1.7, f)); };
   const bodyR = O.rect(1000, 420, (c, r) => {
     P.fill(c, r, pal.a); c.fillStyle = 'rgba(255,255,255,.055)';
@@ -480,9 +481,9 @@ function frillDress(O, p) {
   const av = O.av, E = envelope(av), pal = p.pal;
   common(O, pal);
   const hem = E.tw - .3, top = sweetheart(E);
-  const ease = (t, a) => .0032 + .004 * sstep(E.tw, E.tw - .3, t);
+  const ease = snug(O, E, (t, a) => .0032 + .004 * sstep(E.tw, E.tw - .3, t), .015);
   const S = surf(av, ease);
-  O.cover = [hem + .1, E.tb + .1];
+  O.cover = [E.tw - .75, E.tb + .1];
 
   // 몸판: 가슴은 천을 모아 잡고 허리는 코르셋
   const bodyR = O.rect(1000, 420, (c, r) => {
@@ -502,7 +503,7 @@ function frillDress(O, p) {
   for (const side of ['AL', 'AR']) {
     const seed = side === 'AL' ? 2 : 5, st = .26, end = lerp(.62, 1.18, p.sleeve);
     const rect = O.rect(420, 300, (c, r) => { P.fill(c, r, pal.a); P.gather(c, r, 11, seed, .3, .12); P.shade(c, r, .25, .25); });
-    sleeve(O, side, { start: st, len: end, rect, ease: puff(seed, lerp(.022, .05, p.puff)) });
+    sleeve(O, side, { start: st, len: end, rect, ease: puff(seed, lerp(.016, .036, p.puff)) });
     const lim = av.fr[side], at = t => u => {
       const a = u * TAU - Math.PI, R = limbRing(av, side, t);
       const q = limbPoint(lim, t, a, R(a) + .007), b = limbPoint(lim, t, a, 0);
@@ -537,7 +538,7 @@ function frillDress(O, p) {
     { v0: .28, v1: .69, n: 24, amp: .009, kick: .012, off: 0, seed: 7, rect: O.rect(1200, 180, paint(7, 24)), scallop: .01 },
     { v0: 0, v1: .37, n: 22, amp: .007, kick: .016, off: .005, seed: 9, rect: O.rect(1200, 170, paint(9, 22)), scallop: .01 },
   ];
-  const sk = softSkirt(O, { t0: top0, t1, flare: .036 + .06 * p.flare, tiers });
+  const sk = softSkirt(O, { t0: top0, t1, flare: .03 + .05 * p.flare, tiers });
   const hemLace = O.rect(1200, 60, (c, r) => P.lace(c, r, pal.a));
   tierLace(O, sk, .995, hemLace, 42, 3, .026, .004);
   tierLace(O, sk, .69, hemLace, 38, 5, .018, .017);
@@ -549,7 +550,141 @@ function frillDress(O, p) {
   strap(O, surf(av, () => .002), around(chokerT, 44), { w: .016, rect: chokerR, closed: true, off: .001 });
 }
 
+// ---- 벚꽃 저고리 드레스 (참고: 분홍 저고리 + 허리띠 + 노리개 + 비치는 소매와 레이스) ----
+function hanbok(O, p) {
+  const av = O.av, E = envelope(av), pal = p.pal;
+  common(O, pal);
+  const squeeze = cinch(E, lerp(.004, .017, p.fit)), ease = (t, a) => .0034 + squeeze(t, a);
+  const S = surf(av, ease), jEase = (t, a) => ease(t, a) + .0034 + .004 * sstep(E.tb - .1, E.tb - .3, t); // 저고리는 띠 위에 얹힌다
+  const Sj = surf(av, jEase);
+  const deep = lerp(4.76, 4.6, p.neck), top = a => lerp(deep, 5.03, clamp(Math.abs(a) / .72) ** .85);
+  const wHem = E.tw - .3, jHem = E.tb - .4;
+  O.tol = lerp(.004, .017, p.fit); O.cover = [E.tw - .75, E.ts - .1]; // 큰 삼각형이 걸치면 안 지워지니 치마 속까지 넉넉히 숨긴다
+
+  // 속 몸판: 저고리 아래로 드러나는 흰 허리띠와 진분홍 안단
+  const midR = O.rect(1000, 180, (c, r) => {
+    P.fill(c, r, pal.c);
+    const y = r.y + r.h * .62, g = c.createLinearGradient(0, y, 0, r.y + r.h);
+    g.addColorStop(0, 'rgba(118,104,150,0)'); g.addColorStop(1, 'rgba(118,104,150,.3)');
+    c.fillStyle = g; c.fillRect(r.x, y, r.w, r.y + r.h - y);
+    P.fill(c, { ...r, h: r.h * .62 }, pal.b);
+  });
+  bodice(O, { ease, top: () => jHem + .3, hem: () => wHem, rect: midR });
+
+  // 저고리: 앞은 꽃잎 두 장으로 끝난다
+  const petal = a => {
+    const f = Math.abs(a), s = Math.sin(f / 1.15 * Math.PI);
+    return f > 1.15 ? jHem - .03 : jHem + .12 * (1 - Math.abs(s)) - .03 * s;
+  };
+  const jR = O.rect(1000, 460, (c, r) => {
+    const g = c.createLinearGradient(0, r.y, 0, r.y + r.h);
+    g.addColorStop(0, pal.a2); g.addColorStop(1, pal.a);
+    c.fillStyle = g; c.fillRect(r.x, r.y, r.w, r.h);
+    P.form(c, r, pal.d, .55);
+    P.band(c, r, r.y + r.h - 9, 7, pal.d); // 밑단 박음선
+    for (const f of [.41, .59]) P.stitch(c, r.x + r.w * f, r.y + r.h * .5, r.x + r.w * f, r.y + r.h, pal.d, 2.2, [10, 7]);
+    for (const [x, y, s2] of [[.57, .42, 21], [.6, .54, 15], [.55, .6, 12], [.585, .3, 11]]) P.blossom(c, r.x + r.w * x, r.y + r.h * y, s2, 'rgba(255,240,244,.8)', pal.d);
+  });
+  bodice(O, { ease: jEase, top, hem: petal, rect: jR, nu: 128 });
+
+  // 깃: 하얀 동정이 목에서 V로 내려와 겹친다
+  const wrap = a => ((a + Math.PI) % TAU + TAU) % TAU - Math.PI;
+  const colR = O.rect(1200, 90, (c, r) => { P.fill(c, r, pal.c); P.band(c, r, r.y + r.h - 16, 12, pal.a); });
+  collar(O, Sj, { a: u => lerp(0, TAU, u), top: a => top(wrap(a)) + .004, edge: a => top(wrap(a)) - .13, rect: colR, off: .0026, nu: 170, nv: 6, lift: .0018 });
+
+  // 고름
+  const ribbon = O.rect(120, 120, (c, r) => { P.fill(c, r, pal.c); P.shade(c, r, .1, .22); });
+  const [q0, n0] = onBody(Sj, av, deep - .08, .08, .014);
+  bow(O, Sj, q0, n0, { w: .05, h: .015, rect: ribbon, tail: .15, float: 1 });
+
+  // 소매: 비치는 흰 천, 끝은 분홍 소맷부리
+  for (const side of ['AL', 'AR']) {
+    const seed = side === 'AL' ? 3 : 6, len = lerp(.8, 1.92, p.sleeve), keep = armOf(side);
+    const rect = O.rect(300, 240, (c, r) => {
+      c.clearRect(r.x, r.y, r.w, r.h);
+      c.fillStyle = `rgba(255,255,255,${lerp(.42, .86, p.sheer)})`; c.fillRect(r.x, r.y, r.w, r.h);
+      c.globalCompositeOperation = 'source-atop'; P.gather(c, r, 8, seed, .18, .2); c.globalCompositeOperation = 'source-over';
+    });
+    O.sheerOn = true;
+    sleeve(O, side, { len, rect, start: .03, ease: (v, a) => .0045 + (.04 * v ** 1.6 * (.55 + .45 * Math.cos(a)) + (P.fold((a / TAU + 1.5) % 1, 8, seed) - .5) * .01 * v) * (1 - .6 * sstep(.9, 1, v)) });
+    O.sheerOn = false;
+    const cuffR = O.rect(300, 60, (c, r) => { P.fill(c, r, pal.a); P.gather(c, r, 12, seed, .18, .1); P.band(c, r, r.y + r.h - 8, 6, pal.d); });
+    ruffle(O, { at: limbAt(av, side, len, .019, -1), n: 10, w: .03, amp: .004, flare: .22, rect: cuffR, keep, seed });
+    const capR = O.rect(300, 44, (c, r) => { P.fill(c, r, pal.a); P.gather(c, r, 16, seed, .2, .1); P.band(c, r, r.y + r.h - 7, 5, pal.d); });
+    ruffle(O, { at: limbAt(av, side, .1, .007, 1), n: 15, w: .022, amp: .004, flare: .3, rect: capR, keep, seed: seed + 1 });
+  }
+
+  // 치마: 분홍이 아래로 옅어지고 벚꽃이 흩어진다. 앞치마처럼 비치는 레이스가 겹친다.
+  const t0 = E.tw - .17, t1 = lerp(1.98, 1.35, p.skirt), nf = 13;
+  const skirtR = O.rect(1400, 330, (c, r) => {
+    const g = c.createLinearGradient(0, r.y, 0, r.y + r.h);
+    g.addColorStop(0, pal.a); g.addColorStop(.5, pal.a2); g.addColorStop(1, pal.e);
+    c.fillStyle = g; c.fillRect(r.x, r.y, r.w, r.h);
+    P.form(c, r, pal.d, .5);
+    P.gather(c, r, nf, 5, .2, .12);
+    const R = P.rng(11);
+    c.fillStyle = 'rgba(255,255,255,.5)';
+    for (let i = 0; i < 26; i++) { c.beginPath(); c.arc(r.x + R() * r.w, r.y + R() * r.h * .6, 3 + R() * 3, 0, 7); c.fill(); }
+    for (const [x, y, s2] of [[.63, .2, 16], [.655, .32, 22], [.62, .42, 13], [.68, .48, 18], [.35, .3, 15], [.32, .44, 19]]) P.blossom(c, r.x + r.w * x, r.y + r.h * y, s2, pal.d, 'rgba(255,255,255,.5)');
+  });
+  const laceR = O.rect(1400, 210, (c, r) => P.sheerLace(c, r, undefined, 2, 34));
+  const tiers = [
+    { v0: 0, v1: 1, n: nf, amp: .022, grow: 1.1, seed: 5, rect: skirtR, hem: .004 },
+    { v0: .42, v1: 1.015, n: nf, amp: .022, grow: 1.1, off: .0045, seed: 5, rect: laceR, hem: .004, sheer: true },
+  ];
+  const sk = softSkirt(O, { t0, t1, flare: lerp(.03, .1, p.flare), tiers, nc: 12, ease: .0045 });
+  const frR = O.rect(1400, 90, (c, r) => { P.fill(c, r, pal.c); P.gather(c, r, 22, 8, .26, .12); P.band(c, r, r.y + r.h - 8, 3, 'rgba(120,100,140,.5)'); });
+  ruffle(O, { at: skirtRing(sk, () => .985, -.002), n: 22, w: .05, amp: .018, flare: .42, nu: 22 * 8, nv: 7, rect: frR, keep: 'hip', seed: 8, skin: u => sk.skinAt(u, .985) });
+
+  // 띠: 허리에 두른 진분홍 띠와 치마 윗단
+  const beltR = O.rect(1000, 24, (c, r) => { P.fill(c, r, pal.d); P.band(c, r, r.y + 3, 3, 'rgba(255,255,255,.45)'); });
+  strap(O, surf(av, (t, a) => ease(t, a) + .001), around(E.tw + .1, 64), { w: .013, rect: beltR, closed: true, off: .0016 });
+  skirtBand(O, sk, () => .012, { w: .009, off: .003, rect: beltR });
+
+  // 노리개: 나비 → 금 장식 → 매듭 → 술. 오른쪽 허리에서 늘어진다.
+  const A = .5, hang = t => S(t, A, .012 + .012 * sstep(t0, t0 - .5, t));
+  const knotR = O.flat(() => pal.d), goldR = O.metal;
+  const [b0, b1] = onBody(S, av, E.tw + .14, A, .009);
+  bow(O, S, b0, b1, { w: .027, h: .017, rect: O.rect(100, 100, (c, r) => { P.fill(c, r, pal.a2); P.shade(c, r, .1, .2); }) });
+  const tTop = E.tw - .08;
+  tube(O, [S(E.tw + .1, A, .011), S(E.tw + .02, A, .012), S(tTop, A, .013)], { r: .0017, rect: knotR, keep: 'hip' });
+  lump(O, hang(tTop - .02), b1, { rx: .0085, ry: .0065, rz: .005, rect: goldR, keep: 'hip' });
+  lump(O, hang(tTop - .1), b1, { rx: .0055, ry: .0055, rz: .004, rect: goldR, keep: 'hip' });
+  const kc = hang(tTop - .3), kn = kc.clone().sub(axisT(av, tTop - .3)).setY(0).normalize(), kx = V(0, 1, 0).cross(kn).normalize();
+  for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { // 네 잎 매듭
+    const loop = [];
+    for (let i = 0; i <= 18; i++) { const th = i / 18 * TAU; loop.push(kc.clone().addScaledVector(kx, dx * .0135 + Math.cos(th) * .0098).add(V(0, dy * .0135 + Math.sin(th) * .0098, 0)).addScaledVector(kn, .002)); }
+    tube(O, loop, { r: .0016, rect: knotR, keep: 'hip', n: 6 });
+  }
+  lump(O, kc.clone().addScaledVector(kn, .003), kn, { rx: .0062, ry: .0062, rz: .005, rect: knotR, keep: 'hip', n: 10 });
+  const tasselR = O.rect(80, 120, (c, r) => { P.fill(c, r, pal.d); c.fillStyle = 'rgba(40,0,20,.35)'; for (let x = r.x; x < r.x + r.w; x += 7) c.fillRect(x, r.y + r.h * .2, 2, r.h); });
+  shell(O, { nu: 12, nv: 8, closed: true, rect: tasselR, keep: 'hip', inner: false,
+    f(u, v) {
+      const a = u * TAU, rr = lerp(.0045, .0098, sstep(.05, .3, v)), c = kc.clone().add(V(0, -.018 - v * .07, 0));
+      const d = kx.clone().multiplyScalar(Math.cos(a) * rr).addScaledVector(kn, Math.sin(a) * rr * .7);
+      return [c.clone().add(d), d];
+    } });
+
+  // 왼쪽 리본
+  const [r0, r1] = onBody(S, av, E.tw - .1, -.56, .015);
+  bow(O, S, r0, r1, { w: .036, h: .019, rect: O.rect(100, 100, (c, r) => { P.fill(c, r, pal.d); P.shade(c, r, .1, .3); }), tail: .17, keep: 'hip' });
+  lump(O, r0.clone().addScaledVector(r1.clone().normalize(), .008), r1, { rx: .0095, ry: .0095, rz: .003, rect: goldR, keep: 'hip', n: 12 });
+}
+
 export const LOOKS = {
+  hanbok: { label: '벚꽃 저고리 드레스', why: '짧은 저고리, 조인 허리띠, 노리개, 비치는 소매와 레이스', build: hanbok,
+    controls: [
+      { key: 'fit', label: '허리 조임' }, { key: 'skirt', label: '치마 길이' }, { key: 'flare', label: '치마 퍼짐' },
+      { key: 'sheer', label: '소매 비침' }, { key: 'sleeve', label: '소매 길이' }, { key: 'neck', label: '목선 깊이' },
+    ],
+    colors: [{ key: 'a', label: '옷 색', values: ['#f7a9bf', '#a9c9f7', '#c9b3f2', '#2b2733'] }, { key: 'd', label: '끈 색', values: ['#c8416d', '#3b5fb0', '#6a44b8', '#111118'] }],
+    vote: [
+      { q: '치마 길이', opts: [['아주 짧게', { skirt: .1 }], ['짧게', { skirt: .35 }], ['무릎 위', { skirt: .9 }]] },
+      { q: '옷 색', opts: [['벚꽃', { pal: { a: '#f7a9bf', a2: '#fbcdd9', d: '#c8416d', e: '#fff0f3' } }], ['하늘', { pal: { a: '#a9c9f7', a2: '#cfe2fb', d: '#3b5fb0', e: '#f0f6ff' } }], ['라일락', { pal: { a: '#c9b3f2', a2: '#e0d3f8', d: '#6a44b8', e: '#f6f1ff' } }]] },
+      { q: '소매', opts: [['많이 비치게', { sheer: .1 }], ['조금만', { sheer: .8 }]] },
+    ],
+    params: { fit: .75, skirt: .3, flare: .5, sheer: .55, sleeve: 1, neck: .5,
+      pal: { a: '#f7a9bf', a2: '#fbcdd9', b: '#d9558a', c: '#f6f3f8', d: '#c8416d', e: '#fff0f3', lining: '#f0c0cf', metalHi: '#fff8dc', metalMid: '#e2c37f', metalLo: '#94743a' } } },
   frill: { label: '레이스 프릴 드레스', why: '어깨를 드러낸 퍼프 소매, 조인 허리, 층층이 퍼지는 치마', build: frillDress,
     controls: [
       { key: 'sleeve', label: '소매 길이' }, { key: 'puff', label: '소매 풍성함' },

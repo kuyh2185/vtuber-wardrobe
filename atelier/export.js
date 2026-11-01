@@ -144,7 +144,17 @@ export async function exportVrm(av, w, canvas) {
       JOINTS_0: acc(a.skinIndex.array, 'VEC4', 5123, n), WEIGHTS_0: acc(a.skinWeight.array, 'VEC4', 5126, n),
     },
   };
-  j.meshes.push({ name: 'Outfit', primitives: [prim] });
+  const prims = [prim], sheerIx = w.O.idxS;
+  if (sheerIx.length) { // 비침 천: 위치는 같이 쓰고 면 목록과 재질만 다르다
+    const gs = { ...gm, name: 'Outfit_Sheer_CLOTH', alphaMode: 'BLEND', doubleSided: true };
+    const ms = JSON.parse(JSON.stringify(mp));
+    ms.name = 'Outfit_Sheer_CLOTH'; ms.renderQueue = 3000; ms.tagMap = { RenderType: 'Transparent' };
+    Object.assign(ms.floatProperties, { _BlendMode: 2, _CullMode: 0, _OutlineWidthMode: 0, _OutlineWidth: 0, _ZWrite: 0, _SrcBlend: 5, _DstBlend: 10 });
+    ms.keywordMap = { _ALPHABLEND_ON: true, _ALPHAPREMULTIPLY_ON: false, MTOON_OUTLINE_NONE: true };
+    j.materials.push(gs); j.extensions.VRM.materialProperties.push(ms);
+    prims.push({ ...prim, material: j.materials.length - 1, indices: acc(new Uint32Array(sheerIx), 'SCALAR', 5125, sheerIx.length, {}, 34963) });
+  }
+  j.meshes.push({ name: 'Outfit', primitives: prims });
   j.nodes.push({ name: 'Outfit', mesh: j.meshes.length - 1, skin: j.skins.length - 1 });
   j.scenes[j.scene || 0].nodes.push(j.nodes.length - 1);
 

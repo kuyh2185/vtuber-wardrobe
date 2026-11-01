@@ -75,6 +75,7 @@ export function envelope(av) {
 export class Outfit {
   constructor(av) {
     this.av = av; this.pos = []; this.nor = []; this.uv = []; this.idx = [];
+    this.idxS = []; this.sheerOn = false; // 비침 천 면은 따로 모아 투명 재질로 그린다
     this.keep = []; // 정점마다 어떤 몸 정점을 볼지
     this.link = []; // 안쪽 면은 바깥 정점과 같은 가중치
     this.custom = new Map();
@@ -122,9 +123,10 @@ export function shell(O, { nu, nv, closed, th = .002, rect, f, keep, skin, inner
     base[k] = v;
     if (skin) O.custom.set(v, skin(i / nu, j / nv));
   }
-  const quad = (a, b, c, d, rev) => { if (rev) O.idx.push(a, c, b, b, c, d); else O.idx.push(a, b, c, b, d, c); };
+  const tris = O.sheerOn ? O.idxS : O.idx;
+  const quad = (a, b, c, d, rev) => { if (rev) tris.push(a, c, b, b, c, d); else tris.push(a, b, c, b, d, c); };
   for (let j = 0; j < nv; j++) for (let i = 0; i < nu; i++) quad(base[j * W + i], base[j * W + i + 1], base[(j + 1) * W + i], base[(j + 1) * W + i + 1], flip);
-  if (!inner) return base;
+  if (!inner || O.sheerOn) return base; // 비침 천에 안감을 대면 안 비친다
   const lin = O.lining, uvx = lin.x + lin.w / 2, uvy = lin.y + lin.h / 2, ins = [];
   for (let k = 0; k < W * H; k++) {
     const v = O.push(P[k].clone().addScaledVector(N[k], -th), N[k].clone().negate(), uvx, uvy, keep);
@@ -183,6 +185,9 @@ export function above(av, S, q, off = 0) {
   const c = torsoParam(av.fr, q), s = S(c.t, c.a, off);
   return torsoParam(av.fr, s).r > c.r ? s : q;
 }
+
+// 허리 재단: 살이 옷 속에 숨겨지니 천을 몸보다 안으로 넣어 허리선을 만든다. 옆을 가장 많이 조인다.
+export const cinch = (E, amt, wide = .34) => (t, a) => -amt * Math.exp(-(((t - E.tw) / wide) ** 2)) * (.4 + .6 * Math.sin(a) ** 2);
 
 export function bodice(O, { ease, top, hem, rect, nu = 96, nv = 48, th = .0025, keep = 'torso' }) {
   const av = O.av, S = surf(av, ease), T0 = 5.4, T1 = 1.2, map = arcMap(S, T0, T1, 84);
@@ -340,21 +345,24 @@ export function chainFor(O, { point, cols, nj = 3, keepTop = .12, name = 'skirt'
 // 겹치마: 허리에서 엉덩이를 타고 내려와 끝에서 종처럼 벌어진다. 층마다 끝이 살짝 들려 층이 보인다.
 // tiers: [{ v0, v1, n 주름 수, amp 주름 깊이, kick 끝 들림, off 반지름 차이, seed, rect, scallop }]
 export function softSkirt(O, { t0, t1, flare, tiers, ease = .004, nc = 14, nj = 3, keepTop = .14, stiff = .5, name = 'skirt' }) {
-  const av = O.av, E = envelope(av), bell = v => flare * (.55 * Math.sin(Math.PI / 2 * clamp(v)) + .45 * v); // 위가 둥글고 끝까지 벌어지는 종 모양
+  const av = O.av, E = envelope(av), bell = (v, a) => flare * clamp(v) ** 1.45 * (1 - .32 * Math.cos(a) ** 2); // 엉덩이까지 붙었다가 아래서 벌어진다. 앞뒤로 덜 퍼져야 옆모습이 전등갓이 안 된다
   const wide = (t, a) => { let m = 0; for (let s = 0; s <= 1.0001; s += .125) m = Math.max(m, E.r(lerp(t0, t, s), a)); return m + ease; };
-  const point = (u, v) => { const a = (u - .5) * TAU, t = lerp(t0, t1, v); return torsoPoint(av.fr, t, a, wide(t, a) + bell(v)); };
+  const point = (u, v) => { const a = (u - .5) * TAU, t = lerp(t0, t1, v); return torsoPoint(av.fr, t, a, wide(t, a) + bell(v, a)); };
   const skinAt = chainFor(O, { point, cols: nc, nj, keepTop, name, stiff });
   for (const T of tiers) {
-    const { v0, v1, n, amp, kick = 0, off = 0, seed = 1, rect, scallop = 0, hem = .012 } = T, m = n * 2;
+    const { v0, v1, n, amp, kick = 0, off = 0, seed = 1, rect, scallop = 0, hem = .012, grow = 0, sheer = false } = T, m = n * 2;
+    const was = O.sheerOn; O.sheerOn = sheer;
     shell(O, { nu: n * 9, nv: 14, closed: true, th: .0012, rect, keep: 'hip',
       f(u, w) {
         const v = lerp(v0, v1, w), a = (u - .5) * TAU, h = fold(u, n, seed), top = sstep(0, .22, w);
         const edge = scallop * (1 - Math.abs(Math.sin(Math.PI * u * m)) ** .5) * w ** 4;
         const t = lerp(t0, t1, v) + w ** 3 * hem * (h - .5) * 2 + edge;
-        const p = torsoPoint(av.fr, t, a, wide(t, a) + bell(v) + off + kick * w ** .8 + amp * (h - .5) * (.3 + .7 * top));
+        const fall = grow ? lerp(.12, 1, v ** grow) : .3 + .7 * top; // grow: 허리는 납작하고 내려갈수록 깊어지는 큰 주름
+        const p = torsoPoint(av.fr, t, a, wide(t, a) + bell(v, a) + off + kick * w ** .8 + amp * (h - .5) * fall);
         return [p, p.clone().sub(axisT(av, t))];
       },
       skin: (u, w) => skinAt(u, lerp(v0, v1, w)) });
+    O.sheerOn = was;
   }
   return { point, skinAt, axis: v => axisT(av, lerp(t0, t1, v)) };
 }
