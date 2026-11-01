@@ -1,0 +1,26 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>몸 지도 점검</title>
+<script type="importmap">{"imports":{
+  "three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+  "three/addons/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/",
+  "@pixiv/three-vrm":"https://cdn.jsdelivr.net/npm/@pixiv/three-vrm@3.4.2/lib/three-vrm.module.min.js"
+}}</script>
+<script type="module">
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { VRMLoaderPlugin } from '@pixiv/three-vrm';
+import { loadAvatar, matOf } from './body.js';
+const loader = new GLTFLoader();
+loader.register(p => new VRMLoaderPlugin(p));
+const name = new URLSearchParams(location.search).get('m');
+const m = await loadAvatar(loader, '../samples/' + encodeURIComponent(name));
+const band = r => { const o = []; for (let i = 0; i < r.nt; i += 6) o.push(Math.round(r.cov[i] * 100)); return o; };
+window.__info = {
+  name, H: m.fr.H, ys: m.fr.T.ys.map(y => +y.toFixed(3)), pts: m.pts.length,
+  mats: [...new Set(m.meshes.map(o => matOf(o).name))].filter(n => !/Hair|Face|Eye/i.test(n)),
+  T: band(m.maps.T), AL: band(m.maps.AL), LL: band(m.maps.LL),
+  spring: m.vrm.springBoneManager?.joints?.size,
+  groups: m.vrm.springBoneManager?.colliderGroups?.length,
+};
+window.__ready = true;
+</script>

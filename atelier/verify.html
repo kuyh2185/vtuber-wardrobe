@@ -1,0 +1,55 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>내보낸 파일 다시 읽기</title>
+<style>html,body{margin:0;height:100%;background:#25222e}canvas{display:block}</style>
+<script type="importmap">{"imports":{
+  "three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+  "three/addons/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/",
+  "@pixiv/three-vrm":"https://cdn.jsdelivr.net/npm/@pixiv/three-vrm@3.4.2/lib/three-vrm.module.min.js"
+}}</script>
+<script type="module">
+// 내보낸 VRM을 샘플처럼 처음부터 읽어서 옷·흔들림 뼈가 살아 있는지 본다. kick이면 몸을 흔들어 치마가 따라오는지 잰다.
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
+const q = new URLSearchParams(location.search);
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setSize(innerWidth, innerHeight);
+document.body.append(renderer.domElement);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color('#25222e');
+const cam = new THREE.PerspectiveCamera(22, innerWidth / innerHeight, .1, 50);
+scene.add(new THREE.AmbientLight(0xffffff, 1));
+const key = new THREE.DirectionalLight(0xffffff, 2.1);
+key.position.set(-1, 2, 2.4);
+scene.add(key);
+const loader = new GLTFLoader();
+loader.register(p => new VRMLoaderPlugin(p));
+const gltf = await loader.loadAsync('../' + q.get('f'));
+const vrm = gltf.userData.vrm;
+VRMUtils.rotateVRM0(vrm);
+scene.add(vrm.scene);
+const s = 1, h = vrm.humanoid;
+h.getNormalizedBoneNode('leftUpperArm').rotation.z = s * 1.2;
+h.getNormalizedBoneNode('rightUpperArm').rotation.z = -s * 1.2;
+vrm.update(0);
+vrm.scene.updateMatrixWorld(true);
+const box = new THREE.Box3().setFromObject(vrm.scene), H = box.max.y - box.min.y;
+const yaw = (+q.get('yaw') || 0) * Math.PI / 180, D = H / 2 / Math.tan(cam.fov * Math.PI / 360) * 1.06;
+cam.position.set(Math.sin(yaw) * D, H * .5, Math.cos(yaw) * D);
+cam.lookAt(0, H * .5, 0);
+const joints = [...vrm.springBoneManager.joints].filter(j => j.bone.name.startsWith('Outfit'));
+for (let i = 0; i < 60; i++) vrm.update(1 / 60);
+const rest = joints.map(j => j.bone.getWorldQuaternion(new THREE.Quaternion()));
+let moved = 0;
+if (q.get('kick')) {
+  const hips = h.getNormalizedBoneNode('hips');
+  for (let i = 0; i < 40; i++) { hips.rotation.y = Math.sin(i * .35) * .5; vrm.update(1 / 60); }
+  vrm.scene.updateMatrixWorld(true);
+  joints.forEach((j, i) => { moved = Math.max(moved, 2 * Math.acos(Math.min(1, Math.abs(rest[i].dot(j.bone.getWorldQuaternion(new THREE.Quaternion())))))); });
+}
+renderer.render(scene, cam);
+let tris = 0; vrm.scene.traverse(o => { if (o.isMesh && o.geometry.index) tris += o.geometry.index.count / 3; });
+window.__info = { version: vrm.meta.metaVersion, title: vrm.meta.name ?? vrm.meta.title, outfit: !!vrm.scene.getObjectByName('Outfit'), allJoints: vrm.springBoneManager.joints.size, outfitJoints: joints.length, moved: +moved.toFixed(3), expr: vrm.expressionManager.expressions.length, tris };
+window.__ready = true;
+</script>

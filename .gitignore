@@ -1,0 +1,7 @@
+samples/*
+!samples/AvatarSample_D.vrm
+!samples/AvatarSample_E.vrm
+!samples/AvatarSample_G.vrm
+out/
+node_modules/
+result/

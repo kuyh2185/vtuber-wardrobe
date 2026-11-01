@@ -1,0 +1,72 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>옷 시험</title>
+<style>html,body{margin:0;height:100%;background:#25222e}canvas{display:block}</style>
+<script type="importmap">{"imports":{
+  "three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+  "three/addons/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/",
+  "@pixiv/three-vrm":"https://cdn.jsdelivr.net/npm/@pixiv/three-vrm@3.4.2/lib/three-vrm.module.min.js"
+}}</script>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
+import { loadAvatar } from './body.js';
+import { wear, hideOld, poke } from './wear.js';
+import { exportVrm } from './export.js';
+import { LOOKS } from './looks.js';
+import { SIZE } from './tex.js';
+
+// ?look=hood &m=D &yaw=도 &zoom=1 &y=비율 &p={"len":.3}
+const q = new URLSearchParams(location.search);
+const look = LOOKS[q.get('look') || 'hood'];
+const name = `AvatarSample_${q.get('m') || 'D'}.vrm`;
+const yaw = (+q.get('yaw') || 0) * Math.PI / 180, zoom = +q.get('zoom') || 1, cy = +q.get('y') || .5;
+const over = q.get('p') ? JSON.parse(q.get('p')) : {};
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setSize(innerWidth, innerHeight);
+document.body.append(renderer.domElement);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color('#25222e');
+const cam = new THREE.PerspectiveCamera(22, innerWidth / innerHeight, .1, 50);
+scene.add(new THREE.AmbientLight(0xffffff, 1.0));
+const key = new THREE.DirectionalLight(0xffffff, 2.1);
+key.position.set(-1, 2, 2.4);
+scene.add(key);
+
+const loader = new GLTFLoader();
+loader.register(p => new VRMLoaderPlugin(p));
+const av = await loadAvatar(loader, '../samples/' + name);
+const canvas = document.createElement('canvas');
+canvas.width = canvas.height = SIZE;
+hideOld(av);
+const vrm = av.vrm;
+if (av.v0) VRMUtils.rotateVRM0(vrm);
+scene.add(vrm.scene);
+vrm.scene.updateMatrixWorld(true); // 흔들림 뼈 끝점은 월드 좌표로 기억되므로 돌린 뒤에 입힌다
+const t0 = performance.now();
+const w = wear(av, look.build, { ...look.params, ...over }, canvas);
+const ms = performance.now() - t0;
+
+const s = av.v0 ? 1 : -1, h = vrm.humanoid;
+h.getNormalizedBoneNode('leftUpperArm').rotation.z = s * 1.2;
+h.getNormalizedBoneNode('rightUpperArm').rotation.z = -s * 1.2;
+h.getNormalizedBoneNode('leftLowerArm').rotation.z = s * .12;
+h.getNormalizedBoneNode('rightLowerArm').rotation.z = -s * .12;
+vrm.update(0);
+vrm.scene.updateMatrixWorld(true);
+
+const H = av.fr.H * 1.16, D = H / 2 / Math.tan(cam.fov * Math.PI / 360) * 1.04 / zoom;
+cam.position.set(Math.sin(yaw) * D, H * cy, Math.cos(yaw) * D);
+cam.lookAt(0, H * cy, 0);
+for (let i = 0; i < 60; i++) vrm.update(1 / 60);
+renderer.render(scene, cam);
+window.__info = { ms: Math.round(ms), verts: w.verts, chains: w.joints.length, poke: poke(av, w.O) };
+if (q.get('out')) {
+  const b = await exportVrm(av, w, canvas);
+  let t = ''; for (let i = 0; i < b.length; i += 32768) t += String.fromCharCode(...b.subarray(i, i + 32768));
+  window.__out = btoa(t);
+}
+window.__ready = true;
+</script>

@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="ko">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>옷 입힌 결과 보기</title>
+<style>
+html,body{margin:0;height:100%;background:#2a2738;color:#f2f0f7;font:15px/1.4 system-ui,"Malgun Gothic",sans-serif;overflow:hidden}
+canvas{display:block}
+nav{position:fixed;left:16px;top:16px;display:flex;flex-direction:column;gap:8px;max-width:calc(100vw - 32px)}
+button{padding:10px 14px;border:1px solid #6b6585;border-radius:8px;background:#35314a;color:inherit;font:inherit;text-align:left;cursor:pointer}
+button[aria-pressed=true]{background:#e0b64f;border-color:#e0b64f;color:#211e2e;font-weight:700}
+#hint{position:fixed;left:16px;bottom:16px;color:#c9c5d8}
+</style>
+<nav id="nav" aria-label="결과 고르기"></nav>
+<div id="hint" role="status">불러오는 중</div>
+<script type="importmap">{"imports":{
+  "three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+  "three/addons/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/",
+  "@pixiv/three-vrm":"https://cdn.jsdelivr.net/npm/@pixiv/three-vrm@3.4.2/lib/three-vrm.module.min.js"
+}}</script>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
+
+const LIST = [
+  ['초록 앞치마 원피스', '../out/c/00.vrm'],
+  ['분홍 드레스', '../out/c/01.vrm'],
+  ['니트 조끼 교복', '../out/c/02.vrm'],
+];
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+document.body.append(renderer.domElement);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color('#2a2738');
+const cam = new THREE.PerspectiveCamera(24, 1, .1, 50);
+scene.add(new THREE.AmbientLight(0xffffff, 1.6));
+const key = new THREE.DirectionalLight(0xffffff, 2.2);
+key.position.set(-1, 2, 2);
+scene.add(key);
+const orbit = new OrbitControls(cam, renderer.domElement);
+orbit.enableDamping = true;
+
+const size = () => {
+  renderer.setSize(innerWidth, innerHeight);
+  cam.aspect = innerWidth / innerHeight;
+  cam.updateProjectionMatrix();
+};
+addEventListener('resize', size);
+size();
+
+const loader = new GLTFLoader();
+loader.register(p => new VRMLoaderPlugin(p));
+const hint = document.getElementById('hint');
+const nav = document.getElementById('nav');
+let cur = null, token = 0;
+
+async function show(i) {
+  const my = ++token;
+  [...nav.children].forEach((b, k) => b.setAttribute('aria-pressed', k === i));
+  hint.textContent = '불러오는 중';
+  let gltf;
+  try {
+    gltf = await loader.loadAsync(LIST[i][1]);
+  } catch (e) {
+    hint.textContent = '파일을 못 불러왔어요: ' + LIST[i][1];
+    throw e;
+  }
+  if (my !== token) return; // 받는 중에 다른 버튼을 눌렀으면 늦게 온 건 버림
+  const vrm = gltf.userData.vrm;
+  VRMUtils.rotateVRM0(vrm);
+  if (cur) { scene.remove(cur.scene); VRMUtils.deepDispose(cur.scene); }
+  cur = vrm;
+  scene.add(vrm.scene);
+
+  const s = vrm.meta.metaVersion === '0' ? 1 : -1; // 0.x는 뒤집어 놓아 부호가 반대
+  vrm.humanoid.getNormalizedBoneNode('leftUpperArm').rotation.z = s * 1.15;
+  vrm.humanoid.getNormalizedBoneNode('rightUpperArm').rotation.z = -s * 1.15;
+  vrm.update(0);
+  vrm.scene.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(vrm.scene);
+  const H = box.max.y - box.min.y, y = box.min.y + H * .5;
+  orbit.target.set(0, y, 0);
+  cam.position.set(0, y, H / 2 / Math.tan(cam.fov * Math.PI / 360) * 1.15);
+  hint.textContent = '끌면 돌아가고, 휠로 확대해요';
+  window.__ready = i;
+}
+
+LIST.forEach(([label], i) => {
+  const b = document.createElement('button');
+  b.textContent = label;
+  b.onclick = () => show(i);
+  nav.append(b);
+});
+
+const clock = new THREE.Clock();
+renderer.setAnimationLoop(() => {
+  const dt = Math.min(clock.getDelta(), .05);
+  cur?.update(dt);
+  orbit.update();
+  renderer.render(scene, cam);
+});
+show(0);
+</script>
+</html>

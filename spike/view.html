@@ -1,0 +1,68 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>VRM 시험</title>
+<style>html,body{margin:0;height:100%;background:#1b1a26}canvas{display:block}</style>
+<script type="importmap">{"imports":{
+  "three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+  "three/addons/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/",
+  "@pixiv/three-vrm":"https://cdn.jsdelivr.net/npm/@pixiv/three-vrm@3.4.2/lib/three-vrm.module.min.js"
+}}</script>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
+
+// ?m=파일이름 &hide=재질 이름 정규식 &yaw=도
+const q = new URLSearchParams(location.search);
+const name = q.get('m') || 'AvatarSample_D.vrm';
+const hide = q.get('hide') ? new RegExp(q.get('hide'), 'i') : null;
+const yaw = (+q.get('yaw') || 0) * Math.PI / 180;
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(1);
+document.body.append(renderer.domElement);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color('#2a2738');
+const cam = new THREE.PerspectiveCamera(24, innerWidth / innerHeight, .1, 50);
+scene.add(new THREE.AmbientLight(0xffffff, 1.6));
+const key = new THREE.DirectionalLight(0xffffff, 2.2);
+key.position.set(-1, 2, 2);
+scene.add(key);
+
+const loader = new GLTFLoader();
+loader.register(p => new VRMLoaderPlugin(p));
+const gltf = await loader.loadAsync('../samples/' + encodeURIComponent(name));
+const vrm = gltf.userData.vrm;
+VRMUtils.rotateVRM0(vrm);
+scene.add(vrm.scene);
+
+const prims = [];
+vrm.scene.traverse(o => {
+  if (!o.isMesh) return;
+  const mats = Array.isArray(o.material) ? o.material : [o.material];
+  const m = mats[0];
+  const n = m.name || '';
+  const out = !!hide && hide.test(n);
+  if (out) o.visible = false;
+  prims.push({ mesh: o.name, material: n, verts: o.geometry.attributes.position.count, hidden: out });
+});
+
+// A자 자세로 팔 내리기
+const h = vrm.humanoid;
+const arm = (b, z) => { const n = h.getNormalizedBoneNode(b); if (n) n.rotation.z = z; };
+const s = vrm.meta.metaVersion === '0' ? 1 : -1; // 0.x는 뒤집어 놓아 부호가 반대
+arm('leftUpperArm', s * 1.15); arm('rightUpperArm', -s * 1.15);
+vrm.update(0);
+vrm.scene.updateMatrixWorld(true);
+
+const box = new THREE.Box3().setFromObject(vrm.scene);
+const H = box.max.y - box.min.y;
+const D = H / 2 / Math.tan(cam.fov * Math.PI / 360) * 1.08;
+cam.position.set(Math.sin(yaw) * D, box.min.y + H * .5, Math.cos(yaw) * D);
+cam.lookAt(0, box.min.y + H * .5, 0);
+for (let i = 0; i < 30; i++) vrm.update(1 / 60);
+renderer.render(scene, cam);
+window.__info = { name, H, title: vrm.meta.title || vrm.meta.name, version: vrm.meta.metaVersion, prims };
+window.__ready = true;
+</script>
